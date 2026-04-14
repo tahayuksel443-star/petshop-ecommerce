@@ -5,6 +5,7 @@ import { STORE_BRAND_NAME } from '@/lib/storefront';
 
 interface FooterProps {
   siteName?: string | null;
+  siteDescription?: string | null;
   footerDescription?: string | null;
   contactPhone?: string | null;
   contactEmail?: string | null;
@@ -17,6 +18,7 @@ interface FooterProps {
 
 export default function Footer({
   siteName = STORE_BRAND_NAME,
+  siteDescription,
   footerDescription,
   contactPhone,
   contactEmail,
@@ -37,7 +39,7 @@ export default function Footer({
               </div>
               <div>
                 <span className="text-xl font-bold text-white">{siteName}</span>
-                <p className="text-xs text-gray-500">Kedi ve kopek mamasi odakli online pet market</p>
+                <p className="text-xs text-gray-500">{siteDescription || 'Kedi ve kopek mamasi odakli online pet market'}</p>
               </div>
             </Link>
 

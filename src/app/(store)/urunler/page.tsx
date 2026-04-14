@@ -1,14 +1,13 @@
 import { Metadata } from 'next';
 import { prisma } from '@/lib/prisma';
 import ProductsClient from './ProductsClient';
-import { ALLOWED_STORE_CATEGORY_SLUGS, isAllowedStoreCategory } from '@/lib/storefront';
 
 export const metadata: Metadata = {
   title: 'Tum Mamalar',
   description: 'Kedi ve kopek mamalarini marka, kategori ve fiyat araligina gore kesfedin.',
 };
 
-export const revalidate = 60;
+export const dynamic = 'force-dynamic';
 
 type SearchParams = Record<string, string | undefined> & {
   kategori?: string;
@@ -22,9 +21,8 @@ type SearchParams = Record<string, string | undefined> & {
 
 async function getProducts(params: SearchParams) {
   const where: any = { isActive: true };
-  where.category = { slug: { in: [...ALLOWED_STORE_CATEGORY_SLUGS] } };
 
-  if (params.kategori && isAllowedStoreCategory(params.kategori)) {
+  if (params.kategori) {
     where.category = { slug: params.kategori };
   }
   if (params.search) {
@@ -55,7 +53,7 @@ async function getProducts(params: SearchParams) {
       orderBy,
     }),
     prisma.category.findMany({
-      where: { isActive: true, slug: { in: [...ALLOWED_STORE_CATEGORY_SLUGS] } },
+      where: { isActive: true },
       include: { _count: { select: { products: true } } },
       orderBy: { sortOrder: 'asc' },
     }),

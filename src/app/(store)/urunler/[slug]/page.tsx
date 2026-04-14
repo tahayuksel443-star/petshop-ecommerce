@@ -6,7 +6,6 @@ import { prisma } from '@/lib/prisma';
 import ProductCard from '@/components/store/ProductCard';
 import AddToCartButton from './AddToCartButton';
 import { formatPrice, calculateDiscountPercent } from '@/lib/utils';
-import { isAllowedStoreCategory } from '@/lib/storefront';
 import { FiTruck, FiShield, FiRefreshCw, FiStar, FiChevronRight } from 'react-icons/fi';
 import { FaStar } from 'react-icons/fa';
 
@@ -14,14 +13,13 @@ interface Props {
   params: { slug: string };
 }
 
+export const dynamic = 'force-dynamic';
+
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const product = await prisma.product.findUnique({
     where: { slug: params.slug },
     include: { category: true },
   });
-  if (product && !isAllowedStoreCategory(product.category?.slug)) {
-    return { title: 'Urun Bulunamadi' };
-  }
   if (!product) return { title: 'Ürün Bulunamadı' };
   return {
     title: product.name,
@@ -41,7 +39,6 @@ export default async function ProductDetailPage({ params }: Props) {
   });
 
   if (!product) notFound();
-  if (!isAllowedStoreCategory(product.category?.slug)) notFound();
 
   const relatedProducts = await prisma.product.findMany({
     where: { categoryId: product.categoryId, isActive: true, id: { not: product.id } },

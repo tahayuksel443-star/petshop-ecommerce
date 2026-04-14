@@ -1,10 +1,9 @@
 import { Metadata } from 'next';
 import Link from 'next/link';
-import { prisma } from '@/lib/prisma';
 import Hero from '@/components/store/Hero';
 import ProductCard from '@/components/store/ProductCard';
 import CategoryCard from '@/components/store/CategoryCard';
-import { ALLOWED_STORE_CATEGORY_SLUGS, STORE_BRAND_NAME } from '@/lib/storefront';
+import { STORE_BRAND_NAME } from '@/lib/storefront';
 import { getSiteSettings } from '@/lib/siteSettings';
 import { FiArrowRight, FiTruck, FiShield, FiRefreshCw, FiHeadphones } from 'react-icons/fi';
 
@@ -13,39 +12,49 @@ export const metadata: Metadata = {
   description: 'Kedi ve kopek mamalarinda gunluk kampanyalar, hizli teslimat ve guvenli odeme.',
 };
 
-export const revalidate = 60;
+export const dynamic = 'force-dynamic';
+
+const homePageFallbackData = {
+  featuredProducts: [],
+  bestsellerProducts: [],
+  categories: [],
+};
 
 async function getData() {
-  const [featuredProducts, bestsellerProducts, categories] = await Promise.all([
-    prisma.product.findMany({
-      where: {
-        isActive: true,
-        isFeatured: true,
-        category: { slug: { in: [...ALLOWED_STORE_CATEGORY_SLUGS] } },
-      },
-      include: { category: true },
-      orderBy: { createdAt: 'desc' },
-      take: 8,
-    }),
-    prisma.product.findMany({
-      where: {
-        isActive: true,
-        isBestseller: true,
-        category: { slug: { in: [...ALLOWED_STORE_CATEGORY_SLUGS] } },
-      },
-      include: { category: true },
-      orderBy: { createdAt: 'desc' },
-      take: 8,
-    }),
-    prisma.category.findMany({
-      where: { isActive: true, slug: { in: [...ALLOWED_STORE_CATEGORY_SLUGS] } },
-      include: { _count: { select: { products: true } } },
-      orderBy: { sortOrder: 'asc' },
-      take: 10,
-    }),
-  ]);
+  try {
+    const { prisma } = await import('@/lib/prisma');
+    const [featuredProducts, bestsellerProducts, categories] = await Promise.all([
+      prisma.product.findMany({
+        where: {
+          isActive: true,
+          isFeatured: true,
+        },
+        include: { category: true },
+        orderBy: { createdAt: 'desc' },
+        take: 8,
+      }),
+      prisma.product.findMany({
+        where: {
+          isActive: true,
+          isBestseller: true,
+        },
+        include: { category: true },
+        orderBy: { createdAt: 'desc' },
+        take: 8,
+      }),
+      prisma.category.findMany({
+        where: { isActive: true },
+        include: { _count: { select: { products: true } } },
+        orderBy: { sortOrder: 'asc' },
+        take: 10,
+      }),
+    ]);
 
-  return { featuredProducts, bestsellerProducts, categories };
+    return { featuredProducts, bestsellerProducts, categories };
+  } catch (error) {
+    console.error('Ana sayfa verileri fallback ile dondu:', error);
+    return homePageFallbackData;
+  }
 }
 
 export default async function HomePage() {
@@ -173,7 +182,7 @@ export default async function HomePage() {
             <div className="mt-4 space-y-4 text-sm text-gray-600">
               <div className="flex items-center justify-between border-b border-[#f1e4d4] pb-3">
                 <span>Minimum ucretsiz kargo</span>
-                <strong className="text-gray-900">500 TL</strong>
+                <strong className="text-gray-900">{settings.freeShippingMin ? `${Number(settings.freeShippingMin)} TL` : 'Belirtilmemis'}</strong>
               </div>
               <div className="flex items-center justify-between border-b border-[#f1e4d4] pb-3">
                 <span>Destek saatleri</span>

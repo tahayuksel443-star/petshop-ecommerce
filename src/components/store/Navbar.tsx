@@ -20,12 +20,18 @@ const categories = [
   { name: 'Kopek Mamasi', slug: 'kopek-mamalari' },
 ];
 
+type NavbarCategory = {
+  name: string;
+  slug: string;
+};
+
 interface NavbarProps {
   siteName?: string | null;
   siteDescription?: string | null;
   announcementText?: string | null;
   contactEmail?: string | null;
   contactPhone?: string | null;
+  categories?: NavbarCategory[];
 }
 
 export default function Navbar({
@@ -34,6 +40,7 @@ export default function Navbar({
   announcementText,
   contactEmail,
   contactPhone,
+  categories: dynamicCategories,
 }: NavbarProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
@@ -41,6 +48,7 @@ export default function Navbar({
   const [isCategoryOpen, setIsCategoryOpen] = useState(false);
   const pathname = usePathname() ?? '';
   const totalItems = useCartStore((s) => s.getTotalItems());
+  const categoriesToShow = dynamicCategories?.length ? dynamicCategories : categories;
 
   useEffect(() => {
     const handleScroll = () => setIsScrolled(window.scrollY > 10);
@@ -164,7 +172,7 @@ export default function Navbar({
                 <>
                   <div className="absolute left-0 top-full h-3 w-56" />
                   <div className="absolute left-0 top-[calc(100%+0.25rem)] z-50 w-64 rounded-[1.75rem] border border-[#efe4d5] bg-white p-2 shadow-[0_18px_40px_rgba(15,23,42,0.12)]">
-                    {categories.map((cat) => (
+                    {categoriesToShow.map((cat) => (
                       <Link
                         key={cat.slug}
                         href={`/urunler?kategori=${cat.slug}`}
@@ -238,7 +246,7 @@ export default function Navbar({
 
             <div className="border-t border-gray-100 pt-2">
               <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wide text-gray-400">Mama Cesitleri</p>
-              {categories.map((cat) => (
+              {categoriesToShow.map((cat) => (
                 <Link
                   key={cat.slug}
                   href={`/urunler?kategori=${cat.slug}`}

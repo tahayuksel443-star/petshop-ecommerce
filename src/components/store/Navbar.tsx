@@ -1,9 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { useCartStore } from '@/store/cartStore';
+import { Product } from '@/types';
+import { formatPrice } from '@/lib/utils';
 import {
   FiShoppingCart,
   FiSearch,
@@ -45,16 +48,72 @@ export default function Navbar({
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<Product[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isCategoryOpen, setIsCategoryOpen] = useState(false);
   const pathname = usePathname() ?? '';
   const totalItems = useCartStore((s) => s.getTotalItems());
   const categoriesToShow = dynamicCategories?.length ? dynamicCategories : categories;
+  const searchRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
     const handleScroll = () => setIsScrolled(window.scrollY > 10);
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (!searchRef.current?.contains(event.target as Node)) {
+        setIsSearchOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    const normalizedQuery = searchQuery.trim();
+
+    if (normalizedQuery.length < 2) {
+      setSearchResults([]);
+      setSearchLoading(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(async () => {
+      try {
+        setSearchLoading(true);
+        const res = await fetch(
+          `/api/products?search=${encodeURIComponent(normalizedQuery)}&limit=6&active=true`,
+          { signal: controller.signal }
+        );
+
+        if (!res.ok) {
+          setSearchResults([]);
+          return;
+        }
+
+        const data = await res.json();
+        setSearchResults(data.products || []);
+        setIsSearchOpen(true);
+      } catch (error) {
+        if ((error as Error).name !== 'AbortError') {
+          setSearchResults([]);
+        }
+      } finally {
+        setSearchLoading(false);
+      }
+    }, 250);
+
+    return () => {
+      controller.abort();
+      clearTimeout(timeout);
+    };
+  }, [searchQuery]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -106,11 +165,16 @@ export default function Navbar({
               </div>
             </Link>
 
-            <form onSubmit={handleSearch} className="relative mx-6 hidden max-w-2xl flex-1 md:flex">
+            <form ref={searchRef} onSubmit={handleSearch} className="relative mx-6 hidden max-w-2xl flex-1 md:flex">
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
+                onFocus={() => {
+                  if (searchQuery.trim().length >= 2) {
+                    setIsSearchOpen(true);
+                  }
+                }}
                 placeholder="Marka, icerik veya mama ara..."
                 className="w-full rounded-[1.35rem] border border-[#e8dccd] bg-[#fffaf5] py-3.5 pl-5 pr-12 text-sm text-gray-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] transition-all focus:border-[#d97706] focus:bg-white focus:outline-none focus:ring-4 focus:ring-[#fef3c7]"
               />
@@ -120,6 +184,68 @@ export default function Navbar({
               >
                 <FiSearch size={18} />
               </button>
+
+              {isSearchOpen && searchQuery.trim().length >= 2 && (
+                <div className="absolute left-0 right-0 top-[calc(100%+0.6rem)] z-50 overflow-hidden rounded-[1.75rem] border border-[#efe4d5] bg-white shadow-[0_24px_60px_rgba(15,23,42,0.14)]">
+                  <div className="border-b border-[#f4eadf] bg-[#fffaf5] px-5 py-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#b45309]">
+                      Arama Sonuclari
+                    </p>
+                  </div>
+
+                  {searchLoading ? (
+                    <div className="px-5 py-6 text-sm text-gray-400">Urunler aranıyor...</div>
+                  ) : searchResults.length > 0 ? (
+                    <>
+                      <div className="max-h-[26rem] overflow-y-auto p-2">
+                        {searchResults.map((product) => (
+                          <Link
+                            key={product.id}
+                            href={`/urunler/${product.slug}`}
+                            onClick={() => setIsSearchOpen(false)}
+                            className="flex items-center gap-3 rounded-2xl px-3 py-3 transition-colors hover:bg-[#fff7ed]"
+                          >
+                            <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-2xl bg-[#fffaf5]">
+                              <Image
+                                src={product.images?.[0] || '/images/placeholder-product.svg'}
+                                alt={product.name}
+                                fill
+                                className="object-cover"
+                              />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              {product.category?.name && (
+                                <p className="text-xs font-semibold uppercase tracking-wide text-primary-500">
+                                  {product.category.name}
+                                </p>
+                              )}
+                              <p className="truncate text-sm font-semibold text-gray-900">
+                                {product.name}
+                              </p>
+                              <p className="mt-1 text-sm font-bold text-primary-600">
+                                {formatPrice(Number(product.discountPrice ?? product.price))}
+                              </p>
+                            </div>
+                          </Link>
+                        ))}
+                      </div>
+                      <div className="border-t border-[#f4eadf] p-2">
+                        <Link
+                          href={`/urunler?search=${encodeURIComponent(searchQuery)}`}
+                          onClick={() => setIsSearchOpen(false)}
+                          className="block rounded-2xl px-4 py-3 text-sm font-semibold text-primary-600 transition-colors hover:bg-primary-50"
+                        >
+                          Tum sonuclari gor
+                        </Link>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="px-5 py-6 text-sm text-gray-400">
+                      Bu aramayla eslesen urun bulunamadi.
+                    </div>
+                  )}
+                </div>
+              )}
             </form>
 
             <div className="flex items-center gap-2 md:gap-3">

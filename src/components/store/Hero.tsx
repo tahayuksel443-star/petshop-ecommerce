@@ -78,8 +78,7 @@ export default function Hero({
 
   return (
     <section className={`relative overflow-hidden bg-gradient-to-br ${slide.bg} transition-all duration-500`}>
-      <div className="absolute inset-x-0 top-0 h-24 bg-gradient-to-r from-[#7f1d1d] via-[#991b1b] to-[#b91c1c]" />
-      <div className="container relative mx-auto px-4 pb-14 pt-14 md:pb-20 md:pt-16">
+      <div className="container relative mx-auto px-4 py-12 md:py-16">
         <div className="grid grid-cols-1 items-center gap-10 rounded-[2.25rem] border border-[#f5e6d5] bg-white/92 p-7 shadow-[0_30px_80px_rgba(15,23,42,0.10)] backdrop-blur-sm md:p-12 lg:grid-cols-2">
           <div className="animate-fade-in">
             <span className={`mb-4 inline-block rounded-full px-3 py-1.5 text-xs font-bold uppercase tracking-wide ${slide.accent}`}>

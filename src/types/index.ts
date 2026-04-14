@@ -7,6 +7,7 @@ export interface Product {
   price: number;
   discountPrice?: number | null;
   stock: number;
+  viewCount?: number;
   images: string[];
   isActive: boolean;
   isFeatured: boolean;

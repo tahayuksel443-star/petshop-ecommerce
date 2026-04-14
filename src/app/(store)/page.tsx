@@ -23,24 +23,31 @@ const homePageFallbackData = {
 async function getData() {
   try {
     const { prisma } = await import('@/lib/prisma');
-    const [featuredProducts, bestsellerProducts, categories] = await Promise.all([
+    const [featuredProducts, bestsellerOrderItems, categories] = await Promise.all([
       prisma.product.findMany({
         where: {
           isActive: true,
-          isFeatured: true,
         },
         include: { category: true },
-        orderBy: { createdAt: 'desc' },
-        take: 8,
+        orderBy: [{ viewCount: 'desc' }, { createdAt: 'desc' }],
+        take: 4,
       }),
-      prisma.product.findMany({
+      prisma.orderItem.groupBy({
+        by: ['productId'],
         where: {
-          isActive: true,
-          isBestseller: true,
+          order: {
+            paymentStatus: 'SUCCESS',
+          },
         },
-        include: { category: true },
-        orderBy: { createdAt: 'desc' },
-        take: 8,
+        _sum: {
+          quantity: true,
+        },
+        orderBy: {
+          _sum: {
+            quantity: 'desc',
+          },
+        },
+        take: 4,
       }),
       prisma.category.findMany({
         where: { isActive: true },
@@ -49,6 +56,21 @@ async function getData() {
         take: 10,
       }),
     ]);
+
+    const bestsellerIds = bestsellerOrderItems.map((item) => item.productId);
+    const bestsellerProductsRaw = bestsellerIds.length
+      ? await prisma.product.findMany({
+          where: {
+            id: { in: bestsellerIds },
+            isActive: true,
+          },
+          include: { category: true },
+        })
+      : [];
+
+    const bestsellerProducts = bestsellerIds
+      .map((id) => bestsellerProductsRaw.find((product) => product.id === id))
+      .filter((product): product is (typeof bestsellerProductsRaw)[number] => Boolean(product));
 
     return { featuredProducts, bestsellerProducts, categories };
   } catch (error) {

@@ -44,6 +44,7 @@ model Product {
   price         Decimal     @db.Decimal(10, 2)
   discountPrice Decimal?    @db.Decimal(10, 2)
   stock         Int         @default(0)
+  viewCount     Int         @default(0)
   images        String[]
   isActive      Boolean     @default(true)
   isFeatured    Boolean     @default(false)

@@ -13,6 +13,23 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
   return NextResponse.json(product);
 }
 
+export async function POST(_: NextRequest, { params }: { params: { id: string } }) {
+  const product = await prisma.product.update({
+    where: { id: params.id },
+    data: {
+      viewCount: {
+        increment: 1,
+      },
+    },
+    select: {
+      id: true,
+      viewCount: true,
+    },
+  });
+
+  return NextResponse.json(product);
+}
+
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: 'Yetkisiz erişim' }, { status: 401 });

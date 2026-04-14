@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { prisma } from '@/lib/prisma';
 import ProductCard from '@/components/store/ProductCard';
 import AddToCartButton from './AddToCartButton';
+import TrackProductView from './TrackProductView';
 import { formatPrice, calculateDiscountPercent } from '@/lib/utils';
 import { FiTruck, FiShield, FiRefreshCw, FiStar, FiChevronRight } from 'react-icons/fi';
 import { FaStar } from 'react-icons/fa';
@@ -52,6 +53,7 @@ export default async function ProductDetailPage({ params }: Props) {
 
   return (
     <div className="container mx-auto px-4 py-8">
+      <TrackProductView productId={product.id} />
       {/* Breadcrumb */}
       <nav className="flex items-center gap-2 text-sm text-gray-400 mb-6 flex-wrap">
         <Link href="/" className="hover:text-primary-500 transition-colors">Ana Sayfa</Link>

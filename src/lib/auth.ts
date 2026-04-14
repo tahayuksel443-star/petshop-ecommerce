@@ -1,7 +1,6 @@
 import { NextAuthOptions } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import bcrypt from 'bcryptjs';
-import { prisma } from './prisma';
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -9,24 +8,25 @@ export const authOptions: NextAuthOptions = {
       name: 'credentials',
       credentials: {
         email: { label: 'Email', type: 'email' },
-        password: { label: 'Şifre', type: 'password' },
+        password: { label: 'Sifre', type: 'password' },
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
-          throw new Error('Email ve şifre gereklidir');
+          throw new Error('Email ve sifre gereklidir');
         }
 
+        const { prisma } = await import('./prisma');
         const user = await prisma.adminUser.findUnique({
           where: { email: credentials.email },
         });
 
         if (!user) {
-          throw new Error('Kullanıcı bulunamadı');
+          throw new Error('Kullanici bulunamadi');
         }
 
         const isValid = await bcrypt.compare(credentials.password, user.password);
         if (!isValid) {
-          throw new Error('Hatalı şifre');
+          throw new Error('Hatali sifre');
         }
 
         return {
@@ -59,7 +59,7 @@ export const authOptions: NextAuthOptions = {
   },
   session: {
     strategy: 'jwt',
-    maxAge: 24 * 60 * 60, // 24 saat
+    maxAge: 24 * 60 * 60,
   },
   secret: process.env.NEXTAUTH_SECRET,
 };

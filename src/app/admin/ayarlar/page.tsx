@@ -7,6 +7,7 @@ import { SiteSettings } from '@/types';
 
 export default function AdminSettingsPage() {
   const [settings, setSettings] = useState<Partial<SiteSettings>>({});
+  const [faqItemsText, setFaqItemsText] = useState('[]');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -15,23 +16,38 @@ export default function AdminSettingsPage() {
       .then((r) => r.json())
       .then((data) => {
         setSettings(data);
+        setFaqItemsText(JSON.stringify(data.faqItems || [], null, 2));
         setLoading(false);
       });
   }, []);
 
   const handleSave = async () => {
+    let parsedFaqItems: Array<{ q: string; a: string }> = [];
+
+    try {
+      const parsed = JSON.parse(faqItemsText || '[]');
+      if (!Array.isArray(parsed) || parsed.some((item) => typeof item?.q !== 'string' || typeof item?.a !== 'string')) {
+        throw new Error('invalid');
+      }
+      parsedFaqItems = parsed;
+    } catch {
+      toast.error('SSS JSON alani gecersiz. Her madde q ve a alanlari icermeli.');
+      return;
+    }
+
     setSaving(true);
+    const payload = { ...settings, faqItems: parsedFaqItems };
     let res = await fetch('/api/settings', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(settings),
+      body: JSON.stringify(payload),
     });
 
     if (res.status === 405) {
       res = await fetch('/api/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(settings),
+        body: JSON.stringify(payload),
       });
     }
 
@@ -232,6 +248,70 @@ export default function AdminSettingsPage() {
                 onChange={(e) => updateField('freeShippingMin', Number(e.target.value))}
                 className="input-field"
               />
+            </div>
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-gray-100 bg-white p-6 xl:col-span-2">
+          <h3 className="mb-4 font-semibold text-gray-900">SSS Sayfasi</h3>
+          <div className="grid grid-cols-1 gap-4">
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">Sayfa Basligi</label>
+              <input value={settings.faqTitle || ''} onChange={(e) => updateField('faqTitle', e.target.value)} className="input-field" />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">Sayfa Aciklamasi</label>
+              <textarea value={settings.faqDescription || ''} onChange={(e) => updateField('faqDescription', e.target.value)} rows={3} className="input-field resize-none" />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">SSS Maddeleri (JSON)</label>
+              <textarea
+                value={faqItemsText}
+                onChange={(e) => setFaqItemsText(e.target.value)}
+                rows={10}
+                className="input-field resize-y font-mono text-sm"
+              />
+              <p className="mt-2 text-xs text-gray-500">
+                Ornek: [{'{'}"q":"Soru","a":"Cevap"{'}'}]
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-gray-100 bg-white p-6 xl:col-span-2">
+          <h3 className="mb-4 font-semibold text-gray-900">Iletisim Sayfasi</h3>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div className="md:col-span-2">
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">Sayfa Basligi</label>
+              <input value={settings.contactTitle || ''} onChange={(e) => updateField('contactTitle', e.target.value)} className="input-field" />
+            </div>
+            <div className="md:col-span-2">
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">Sayfa Aciklamasi</label>
+              <textarea value={settings.contactDescription || ''} onChange={(e) => updateField('contactDescription', e.target.value)} rows={3} className="input-field resize-none" />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">Ikinci Telefon</label>
+              <input value={settings.contactPhoneSecondary || ''} onChange={(e) => updateField('contactPhoneSecondary', e.target.value)} className="input-field" />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">Ikinci E-posta</label>
+              <input value={settings.contactEmailSecondary || ''} onChange={(e) => updateField('contactEmailSecondary', e.target.value)} className="input-field" />
+            </div>
+            <div className="md:col-span-2">
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">Ikinci Adres Satiri</label>
+              <input value={settings.contactAddressSecondary || ''} onChange={(e) => updateField('contactAddressSecondary', e.target.value)} className="input-field" />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">Hafta Ici Calisma Saatleri</label>
+              <input value={settings.contactHoursWeekday || ''} onChange={(e) => updateField('contactHoursWeekday', e.target.value)} className="input-field" />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">Hafta Sonu Calisma Saatleri</label>
+              <input value={settings.contactHoursWeekend || ''} onChange={(e) => updateField('contactHoursWeekend', e.target.value)} className="input-field" />
+            </div>
+            <div className="md:col-span-2">
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">Google Maps Embed URL</label>
+              <input value={settings.contactMapEmbedUrl || ''} onChange={(e) => updateField('contactMapEmbedUrl', e.target.value)} className="input-field" placeholder="https://www.google.com/maps/embed?pb=..." />
             </div>
           </div>
         </section>

@@ -130,6 +130,17 @@ export interface SiteSettings {
   featuredDescription?: string | null;
   bestsellerTitle?: string | null;
   bestsellerDescription?: string | null;
+  faqTitle?: string | null;
+  faqDescription?: string | null;
+  faqItems?: Array<{ q: string; a: string }> | null;
+  contactTitle?: string | null;
+  contactDescription?: string | null;
+  contactPhoneSecondary?: string | null;
+  contactEmailSecondary?: string | null;
+  contactAddressSecondary?: string | null;
+  contactHoursWeekday?: string | null;
+  contactHoursWeekend?: string | null;
+  contactMapEmbedUrl?: string | null;
   footerDescription?: string | null;
 }
 

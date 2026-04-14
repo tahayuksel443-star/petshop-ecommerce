@@ -145,6 +145,17 @@ model SiteSettings {
   featuredDescription String?
   bestsellerTitle String?
   bestsellerDescription String?
+  faqTitle        String?
+  faqDescription  String?
+  faqItems        Json?
+  contactTitle    String?
+  contactDescription String?
+  contactPhoneSecondary String?
+  contactEmailSecondary String?
+  contactAddressSecondary String?
+  contactHoursWeekday String?
+  contactHoursWeekend String?
+  contactMapEmbedUrl String?
   footerDescription String?
   updatedAt       DateTime @updatedAt
 

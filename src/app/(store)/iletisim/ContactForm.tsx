@@ -1,0 +1,81 @@
+'use client';
+
+import { useState } from 'react';
+import { FiSend } from 'react-icons/fi';
+import toast from 'react-hot-toast';
+
+export default function ContactForm() {
+  const [form, setForm] = useState({ name: '', email: '', subject: '', message: '' });
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    toast.success('Mesajiniz alindi. En kisa surede size donus yapacagiz.');
+    setForm({ name: '', email: '', subject: '', message: '' });
+    setLoading(false);
+  };
+
+  return (
+    <div className="card p-8">
+      <h2 className="mb-6 text-xl font-bold text-gray-900">Mesaj Gonder</h2>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-gray-700">Adiniz *</label>
+            <input
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              placeholder="Adiniz Soyadiniz"
+              className="input-field"
+              required
+            />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-gray-700">E-posta *</label>
+            <input
+              type="email"
+              value={form.email}
+              onChange={(e) => setForm({ ...form, email: e.target.value })}
+              placeholder="ornek@email.com"
+              className="input-field"
+              required
+            />
+          </div>
+        </div>
+        <div>
+          <label className="mb-1.5 block text-sm font-medium text-gray-700">Konu *</label>
+          <select
+            value={form.subject}
+            onChange={(e) => setForm({ ...form, subject: e.target.value })}
+            className="input-field"
+            required
+          >
+            <option value="">Konu secin</option>
+            <option>Siparis Hakkinda</option>
+            <option>Urun Hakkinda</option>
+            <option>Iade / Degisim</option>
+            <option>Odeme Sorunu</option>
+            <option>Diger</option>
+          </select>
+        </div>
+        <div>
+          <label className="mb-1.5 block text-sm font-medium text-gray-700">Mesajiniz *</label>
+          <textarea
+            value={form.message}
+            onChange={(e) => setForm({ ...form, message: e.target.value })}
+            placeholder="Mesajinizi buraya yazin..."
+            rows={6}
+            className="input-field resize-none"
+            required
+          />
+        </div>
+        <button type="submit" disabled={loading} className="btn-primary w-full justify-center py-3.5">
+          {loading ? <span className="spinner h-5 w-5" /> : <FiSend size={18} />}
+          {loading ? 'Gonderiliyor...' : 'Gonder'}
+        </button>
+      </form>
+    </div>
+  );
+}

@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import { mkdir, writeFile } from 'fs/promises';
 import { join } from 'path';
 import { v4 as uuidv4 } from 'uuid';
+import {
+  applyRateLimit,
+  getClientIp,
+  requireAdminSession,
+  tooManyRequestsResponse,
+  unauthorizedResponse,
+} from '@/lib/security';
 
 export const runtime = 'nodejs';
 
@@ -11,11 +16,11 @@ const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'ima
 const maxFileSize = 5 * 1024 * 1024;
 
 export async function POST(req: NextRequest) {
-  const session = await getServerSession(authOptions);
+  const session = await requireAdminSession();
+  if (!session) return unauthorizedResponse();
 
-  if (!session) {
-    return NextResponse.json({ error: 'Yetkisiz erisim' }, { status: 401 });
-  }
+  const limiter = applyRateLimit(`upload:${getClientIp(req)}`, 30, 10 * 60 * 1000);
+  if (!limiter.allowed) return tooManyRequestsResponse();
 
   const formData = await req.formData();
   const file = formData.get('file');

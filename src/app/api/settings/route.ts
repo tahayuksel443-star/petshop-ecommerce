@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
+import { requireAdminSession, unauthorizedResponse } from '@/lib/security';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -12,6 +14,62 @@ const fallbackSettings = {
   contactAddress: 'Istanbul, Turkiye',
   footerDescription: 'Kedi ve kopek mamasi odakli online pet market.',
 };
+
+const faqItemSchema = z.object({
+  q: z.string().trim().min(1).max(200),
+  a: z.string().trim().min(1).max(2000),
+});
+
+const settingsSchema = z.object({
+  siteName: z.string().trim().min(2).max(120).optional(),
+  siteDescription: z.string().trim().max(500).nullable().optional(),
+  logo: z.string().trim().max(2000).nullable().optional(),
+  favicon: z.string().trim().max(2000).nullable().optional(),
+  announcementText: z.string().trim().max(250).nullable().optional(),
+  contactEmail: z.string().trim().email().max(150).nullable().optional().or(z.literal('')),
+  contactPhone: z.string().trim().max(50).nullable().optional(),
+  contactAddress: z.string().trim().max(300).nullable().optional(),
+  facebook: z.string().trim().url().max(500).nullable().optional().or(z.literal('')),
+  instagram: z.string().trim().url().max(500).nullable().optional().or(z.literal('')),
+  twitter: z.string().trim().url().max(500).nullable().optional().or(z.literal('')),
+  youtube: z.string().trim().url().max(500).nullable().optional().or(z.literal('')),
+  whatsapp: z.string().trim().max(100).nullable().optional(),
+  freeShippingMin: z.number().min(0).max(1000000).nullable().optional(),
+  shippingCost: z.number().min(0).max(1000000).optional(),
+  heroBadge: z.string().trim().max(120).nullable().optional(),
+  heroTitle: z.string().trim().max(250).nullable().optional(),
+  heroDescription: z.string().trim().max(1000).nullable().optional(),
+  heroPrimaryText: z.string().trim().max(80).nullable().optional(),
+  heroPrimaryLink: z.string().trim().max(500).nullable().optional(),
+  heroSecondaryText: z.string().trim().max(80).nullable().optional(),
+  heroSecondaryLink: z.string().trim().max(500).nullable().optional(),
+  categoriesTitle: z.string().trim().max(150).nullable().optional(),
+  categoriesDescription: z.string().trim().max(600).nullable().optional(),
+  featuredTitle: z.string().trim().max(150).nullable().optional(),
+  featuredDescription: z.string().trim().max(600).nullable().optional(),
+  bestsellerTitle: z.string().trim().max(150).nullable().optional(),
+  bestsellerDescription: z.string().trim().max(600).nullable().optional(),
+  faqTitle: z.string().trim().max(150).nullable().optional(),
+  faqDescription: z.string().trim().max(600).nullable().optional(),
+  faqItems: z.array(faqItemSchema).max(30).optional(),
+  contactTitle: z.string().trim().max(150).nullable().optional(),
+  contactDescription: z.string().trim().max(600).nullable().optional(),
+  contactPhoneSecondary: z.string().trim().max(50).nullable().optional(),
+  contactEmailSecondary: z.string().trim().email().max(150).nullable().optional().or(z.literal('')),
+  contactAddressSecondary: z.string().trim().max(300).nullable().optional(),
+  contactHoursWeekday: z.string().trim().max(120).nullable().optional(),
+  contactHoursWeekend: z.string().trim().max(120).nullable().optional(),
+  contactMapEmbedUrl: z.string().trim().url().max(2000).nullable().optional().or(z.literal('')),
+  footerDescription: z.string().trim().max(500).nullable().optional(),
+});
+
+function normalizeEmptyStrings<T extends Record<string, unknown>>(data: T): T {
+  const normalized = Object.fromEntries(
+    Object.entries(data).map(([key, value]) => [key, value === '' ? null : value])
+  );
+
+  return normalized as T;
+}
 
 export async function GET() {
   try {
@@ -30,27 +88,26 @@ export async function GET() {
 }
 
 async function saveSettings(req: NextRequest) {
-  const [{ getServerSession }, { authOptions }, { prisma }] = await Promise.all([
-    import('next-auth'),
-    import('@/lib/auth'),
-    import('@/lib/prisma'),
-  ]);
+  const session = await requireAdminSession();
+  if (!session) return unauthorizedResponse();
 
-  const session = await getServerSession(authOptions);
-  if (!session) {
-    return NextResponse.json({ error: 'Yetkisiz erisim' }, { status: 401 });
+  const { prisma } = await import('@/lib/prisma');
+  const body = await req.json();
+  const parsed = settingsSchema.safeParse(normalizeEmptyStrings(body));
+
+  if (!parsed.success) {
+    return NextResponse.json({ error: 'Gecersiz ayar verisi' }, { status: 400 });
   }
 
-  const body = await req.json();
   let settings = await prisma.siteSettings.findFirst();
 
   if (settings) {
     settings = await prisma.siteSettings.update({
       where: { id: settings.id },
-      data: body,
+      data: parsed.data,
     });
   } else {
-    settings = await prisma.siteSettings.create({ data: body });
+    settings = await prisma.siteSettings.create({ data: parsed.data });
   }
 
   return NextResponse.json(settings);

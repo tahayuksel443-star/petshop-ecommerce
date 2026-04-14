@@ -1,68 +1,176 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { createThreeDSPayment } from '@/lib/iyzico';
 import { generateOrderNumber } from '@/lib/utils';
 import { v4 as uuidv4 } from 'uuid';
+import { applyRateLimit, getClientIp, tooManyRequestsResponse } from '@/lib/security';
+
+export const runtime = 'nodejs';
+
+const paymentSchema = z.object({
+  items: z.array(
+    z.object({
+      id: z.string().min(1),
+      quantity: z.number().int().min(1).max(20),
+    })
+  ).min(1).max(50),
+  shippingAddress: z.object({
+    name: z.string().trim().min(2).max(60),
+    surname: z.string().trim().min(2).max(60),
+    phone: z.string().trim().min(10).max(20),
+    email: z.string().trim().email().max(150),
+    address: z.string().trim().min(5).max(300),
+    city: z.string().trim().min(2).max(80),
+    district: z.string().trim().min(2).max(80),
+    notes: z.string().trim().max(500).optional().nullable(),
+  }),
+  card: z.object({
+    cardHolderName: z.string().trim().min(2).max(80),
+    cardNumber: z.string().trim().regex(/^\d{12,19}$/),
+    expireMonth: z.string().trim().regex(/^(0[1-9]|1[0-2])$/),
+    expireYear: z.string().trim().regex(/^\d{2,4}$/),
+    cvc: z.string().trim().regex(/^\d{3,4}$/),
+  }),
+  couponCode: z.string().trim().max(50).optional().nullable(),
+});
+
+function normalizePhone(phone: string) {
+  const digits = phone.replace(/\D/g, '');
+  if (digits.startsWith('90')) return `+${digits}`;
+  if (digits.startsWith('0')) return `+9${digits}`;
+  return `+90${digits}`;
+}
 
 export async function POST(req: NextRequest) {
-  const body = await req.json();
-  const { items, shippingAddress, card, couponCode, totalAmount, shippingCost } = body;
+  const ip = getClientIp(req);
+  const limiter = applyRateLimit(`payment-create:${ip}`, 10, 10 * 60 * 1000);
+  if (!limiter.allowed) return tooManyRequestsResponse('Cok fazla odeme denemesi yapildi. Lutfen biraz sonra tekrar deneyin.');
 
-  if (!items?.length || !shippingAddress || !card) {
-    return NextResponse.json({ error: 'Eksik bilgi' }, { status: 400 });
+  const parsed = paymentSchema.safeParse(await req.json());
+  if (!parsed.success) {
+    return NextResponse.json({ error: 'Gecersiz odeme bilgisi' }, { status: 400 });
   }
 
-  // Coupon check
-  let discountAmount = 0;
-  if (couponCode) {
-    const coupon = await prisma.coupon.findUnique({
-      where: { code: couponCode, isActive: true },
-    });
-    if (coupon) {
-      if (coupon.discountType === 'PERCENTAGE') {
-        discountAmount = (Number(totalAmount) * Number(coupon.discountValue)) / 100;
-      } else {
-        discountAmount = Number(coupon.discountValue);
-      }
+  const { items, shippingAddress, card, couponCode } = parsed.data;
+
+  const productIds = items.map((item) => item.id);
+  const [products, settings] = await Promise.all([
+    prisma.product.findMany({
+      where: { id: { in: productIds }, isActive: true },
+      select: {
+        id: true,
+        name: true,
+        price: true,
+        discountPrice: true,
+        stock: true,
+      },
+    }),
+    prisma.siteSettings.findFirst(),
+  ]);
+
+  if (products.length !== items.length) {
+    return NextResponse.json({ error: 'Sepette gecersiz veya pasif urun var' }, { status: 400 });
+  }
+
+  const productMap = new Map(products.map((product) => [product.id, product]));
+  const normalizedItems = [];
+  let subtotal = 0;
+
+  for (const item of items) {
+    const product = productMap.get(item.id);
+    if (!product) {
+      return NextResponse.json({ error: 'Urun bulunamadi' }, { status: 400 });
     }
+
+    if (product.stock < item.quantity) {
+      return NextResponse.json({ error: `${product.name} icin yeterli stok yok` }, { status: 400 });
+    }
+
+    const unitPrice = Number(product.discountPrice ?? product.price);
+    subtotal += unitPrice * item.quantity;
+    normalizedItems.push({
+      product,
+      quantity: item.quantity,
+      unitPrice,
+    });
   }
 
-  const finalAmount = Math.max(0, Number(totalAmount) - discountAmount);
+  const freeShippingMin = settings?.freeShippingMin ? Number(settings.freeShippingMin) : null;
+  const defaultShippingCost = Number(settings?.shippingCost ?? 0);
+  const shippingCost = freeShippingMin !== null && subtotal >= freeShippingMin ? 0 : defaultShippingCost;
+
+  let discountAmount = 0;
+  let appliedCouponCode: string | null = null;
+
+  if (couponCode) {
+    const coupon = await prisma.coupon.findFirst({
+      where: {
+        code: couponCode.toUpperCase(),
+        isActive: true,
+      },
+    });
+
+    if (!coupon) {
+      return NextResponse.json({ error: 'Kupon kodu gecersiz' }, { status: 400 });
+    }
+
+    if (coupon.expiresAt && coupon.expiresAt < new Date()) {
+      return NextResponse.json({ error: 'Kuponun suresi dolmus' }, { status: 400 });
+    }
+
+    if (coupon.maxUses && coupon.usedCount >= coupon.maxUses) {
+      return NextResponse.json({ error: 'Kupon kullanim limiti dolmus' }, { status: 400 });
+    }
+
+    if (coupon.minOrderAmount && subtotal < Number(coupon.minOrderAmount)) {
+      return NextResponse.json({ error: 'Kupon minimum sepet tutarini saglamiyor' }, { status: 400 });
+    }
+
+    discountAmount =
+      coupon.discountType === 'PERCENTAGE'
+        ? (subtotal * Number(coupon.discountValue)) / 100
+        : Number(coupon.discountValue);
+
+    discountAmount = Math.min(discountAmount, subtotal);
+    appliedCouponCode = coupon.code;
+  }
+
+  const finalAmount = Number((subtotal + shippingCost - discountAmount).toFixed(2));
   const orderNumber = generateOrderNumber();
   const conversationId = uuidv4();
 
-  // Prepare iyzico payment
-  const basketItems = items.map((item: any) => ({
-    id: item.id,
-    name: item.name.slice(0, 50),
-    category1: 'Evcil Hayvan Ürünleri',
+  const basketItems = normalizedItems.map(({ product, quantity, unitPrice }) => ({
+    id: product.id,
+    name: product.name.slice(0, 50),
+    category1: 'Evcil Hayvan Urunleri',
     itemType: 'PHYSICAL',
-    price: ((item.discountPrice ?? item.price) * item.quantity).toFixed(2),
+    price: (unitPrice * quantity).toFixed(2),
   }));
 
-  // Basket total must equal price
-  const basketTotal = basketItems.reduce((sum: number, i: any) => sum + parseFloat(i.price), 0);
-
-  const ip = req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || '85.34.78.112';
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
+  if (!siteUrl) {
+    return NextResponse.json({ error: 'Odeme ortami eksik ayarlanmis' }, { status: 500 });
+  }
 
   const paymentRequest = {
     locale: 'tr',
     conversationId,
-    price: basketTotal.toFixed(2),
+    price: subtotal.toFixed(2),
     paidPrice: finalAmount.toFixed(2),
     currency: 'TRY',
     installment: '1',
     basketId: orderNumber,
     paymentChannel: 'WEB',
     paymentGroup: 'PRODUCT',
-    callbackUrl: `${process.env.NEXT_PUBLIC_SITE_URL}/api/payment/callback`,
+    callbackUrl: `${siteUrl}/api/payment/callback`,
     buyer: {
       id: conversationId,
       name: shippingAddress.name,
       surname: shippingAddress.surname,
-      gsmNumber: shippingAddress.phone.replace(/\D/g, '').replace(/^0/, '+90'),
+      gsmNumber: normalizePhone(shippingAddress.phone),
       email: shippingAddress.email,
-      identityNumber: '74300864791',
+      identityNumber: '11111111111',
       registrationAddress: `${shippingAddress.address}, ${shippingAddress.district}/${shippingAddress.city}`,
       ip,
       city: shippingAddress.city,
@@ -92,58 +200,49 @@ export async function POST(req: NextRequest) {
   };
 
   try {
-    const result = await createThreeDSPayment(paymentRequest as any);
+    const result = await createThreeDSPayment(paymentRequest as never);
 
-    // Create order in DB (pending)
-    const order = await prisma.order.create({
+    if (result.status !== 'success' || !result.threeDSHtmlContent) {
+      return NextResponse.json({
+        status: 'error',
+        errorMessage: result.errorMessage || 'Odeme baslatilamadi',
+        errorCode: result.errorCode,
+      }, { status: 400 });
+    }
+
+    await prisma.order.create({
       data: {
         orderNumber,
         status: 'PENDING',
         paymentStatus: 'PENDING',
         paymentId: conversationId,
         totalAmount: finalAmount,
-        shippingCost: shippingCost || 0,
+        shippingCost,
         discountAmount,
-        couponCode: couponCode || null,
-        shippingAddress: shippingAddress,
+        couponCode: appliedCouponCode,
+        shippingAddress,
         customerName: `${shippingAddress.name} ${shippingAddress.surname}`,
         customerEmail: shippingAddress.email,
         customerPhone: shippingAddress.phone,
         notes: shippingAddress.notes || null,
         items: {
-          create: items.map((item: any) => ({
-            productId: item.id,
-            productName: item.name,
-            quantity: item.quantity,
-            price: item.discountPrice ?? item.price,
+          create: normalizedItems.map(({ product, quantity, unitPrice }) => ({
+            productId: product.id,
+            productName: product.name,
+            quantity,
+            price: unitPrice,
           })),
         },
       },
     });
 
-    // Update coupon usage
-    if (couponCode && discountAmount > 0) {
-      await prisma.coupon.update({
-        where: { code: couponCode },
-        data: { usedCount: { increment: 1 } },
-      });
-    }
-
-    if (result.status === 'success') {
-      return NextResponse.json({
-        status: 'success',
-        threeDSHtmlContent: result.threeDSHtmlContent,
-        orderNumber,
-      });
-    } else {
-      return NextResponse.json({
-        status: 'error',
-        errorMessage: result.errorMessage || 'Ödeme başlatılamadı',
-        errorCode: result.errorCode,
-      });
-    }
-  } catch (error: any) {
+    return NextResponse.json({
+      status: 'success',
+      threeDSHtmlContent: result.threeDSHtmlContent,
+      orderNumber,
+    });
+  } catch (error) {
     console.error('iyzico error:', error);
-    return NextResponse.json({ status: 'error', errorMessage: 'Ödeme servisi hatası' }, { status: 500 });
+    return NextResponse.json({ status: 'error', errorMessage: 'Odeme servisi hatasi' }, { status: 500 });
   }
 }

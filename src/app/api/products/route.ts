@@ -1,25 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { slugify } from '@/lib/utils';
-import { z } from 'zod';
+import { requireAdminSession, unauthorizedResponse } from '@/lib/security';
 
 const productSchema = z.object({
-  name: z.string().min(2),
-  description: z.string().optional(),
-  shortDesc: z.string().optional(),
-  price: z.number().positive(),
-  discountPrice: z.number().positive().optional().nullable(),
-  stock: z.number().int().min(0),
-  images: z.array(z.string()).default([]),
+  name: z.string().trim().min(2).max(160),
+  description: z.string().trim().max(5000).nullable().optional(),
+  shortDesc: z.string().trim().max(500).nullable().optional(),
+  price: z.number().positive().max(1000000),
+  discountPrice: z.number().positive().max(1000000).optional().nullable(),
+  stock: z.number().int().min(0).max(1000000),
+  images: z.array(z.string().trim().max(100000)).max(20).default([]),
   isActive: z.boolean().default(true),
   isFeatured: z.boolean().default(false),
   isBestseller: z.boolean().default(false),
-  brand: z.string().optional().nullable(),
-  weight: z.string().optional().nullable(),
-  sku: z.string().optional().nullable(),
-  categoryId: z.string(),
+  brand: z.string().trim().max(120).optional().nullable(),
+  weight: z.string().trim().max(120).optional().nullable(),
+  sku: z.string().trim().max(120).optional().nullable(),
+  categoryId: z.string().min(1),
 });
 
 export async function GET(req: NextRequest) {
@@ -29,10 +28,10 @@ export async function GET(req: NextRequest) {
   const featured = searchParams.get('featured');
   const bestseller = searchParams.get('bestseller');
   const active = searchParams.get('active');
-  const page = Number(searchParams.get('page') || 1);
-  const limit = Number(searchParams.get('limit') || 50);
+  const page = Math.max(1, Number(searchParams.get('page') || 1));
+  const limit = Math.min(100, Math.max(1, Number(searchParams.get('limit') || 50)));
 
-  const where: any = {};
+  const where: Record<string, unknown> = {};
   if (active !== null) where.isActive = active === 'true';
   if (categorySlug) where.category = { slug: categorySlug };
   if (search) {
@@ -59,19 +58,17 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session) return NextResponse.json({ error: 'Yetkisiz erişim' }, { status: 401 });
+  const session = await requireAdminSession();
+  if (!session) return unauthorizedResponse();
 
-  const body = await req.json();
-  const parsed = productSchema.safeParse(body);
+  const parsed = productSchema.safeParse(await req.json());
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.errors }, { status: 400 });
+    return NextResponse.json({ error: 'Gecersiz urun verisi' }, { status: 400 });
   }
 
   const data = parsed.data;
   let slug = slugify(data.name);
 
-  // Slug unique check
   const existing = await prisma.product.findUnique({ where: { slug } });
   if (existing) slug = `${slug}-${Date.now()}`;
 

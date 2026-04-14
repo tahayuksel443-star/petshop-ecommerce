@@ -1,18 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { requireAdminSession, unauthorizedResponse } from '@/lib/security';
 
 export async function GET(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session) return NextResponse.json({ error: 'Yetkisiz erişim' }, { status: 401 });
+  const session = await requireAdminSession();
+  if (!session) return unauthorizedResponse();
 
   const { searchParams } = req.nextUrl;
   const status = searchParams.get('status');
-  const page = Number(searchParams.get('page') || 1);
-  const limit = Number(searchParams.get('limit') || 20);
+  const page = Math.max(1, Number(searchParams.get('page') || 1));
+  const limit = Math.min(100, Math.max(1, Number(searchParams.get('limit') || 20)));
 
-  const where: any = {};
+  const where: Record<string, unknown> = {};
   if (status) where.status = status;
 
   const [orders, total] = await Promise.all([

@@ -1,6 +1,7 @@
 import { NextAuthOptions } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import bcrypt from 'bcryptjs';
+import { applyRateLimit } from './security';
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -12,22 +13,28 @@ export const authOptions: NextAuthOptions = {
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
-          throw new Error('Email ve sifre gereklidir');
+          throw new Error('Giris bilgileri gecersiz');
+        }
+
+        const limiter = applyRateLimit(
+          `admin-login:${String(credentials.email).toLowerCase()}`,
+          5,
+          15 * 60 * 1000
+        );
+
+        if (!limiter.allowed) {
+          throw new Error('Cok fazla hatali giris denemesi. Lutfen daha sonra tekrar deneyin');
         }
 
         const { prisma } = await import('./prisma');
         const user = await prisma.adminUser.findUnique({
-          where: { email: credentials.email },
+          where: { email: String(credentials.email).trim().toLowerCase() },
         });
 
-        if (!user) {
-          throw new Error('Kullanici bulunamadi');
-        }
+        if (!user) throw new Error('Giris bilgileri gecersiz');
 
         const isValid = await bcrypt.compare(credentials.password, user.password);
-        if (!isValid) {
-          throw new Error('Hatali sifre');
-        }
+        if (!isValid) throw new Error('Giris bilgileri gecersiz');
 
         return {
           id: user.id,
@@ -62,4 +69,5 @@ export const authOptions: NextAuthOptions = {
     maxAge: 24 * 60 * 60,
   },
   secret: process.env.NEXTAUTH_SECRET,
+  debug: false,
 };

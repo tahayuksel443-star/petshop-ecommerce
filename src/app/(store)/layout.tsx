@@ -9,6 +9,7 @@ export default async function StoreLayout({ children }: { children: React.ReactN
     <div className="min-h-screen flex flex-col bg-petshop-warm">
       <Navbar
         siteName={settings.siteName}
+        siteDescription={settings.siteDescription}
         announcementText={settings.announcementText}
         contactEmail={settings.contactEmail}
         contactPhone={settings.contactPhone}

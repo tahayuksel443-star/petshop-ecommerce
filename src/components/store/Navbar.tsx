@@ -22,6 +22,7 @@ const categories = [
 
 interface NavbarProps {
   siteName?: string | null;
+  siteDescription?: string | null;
   announcementText?: string | null;
   contactEmail?: string | null;
   contactPhone?: string | null;
@@ -29,6 +30,7 @@ interface NavbarProps {
 
 export default function Navbar({
   siteName = 'Köşem Pet Shop',
+  siteDescription,
   announcementText,
   contactEmail,
   contactPhone,
@@ -81,16 +83,18 @@ export default function Navbar({
         }`}
       >
         <div className="container mx-auto px-4">
-          <div className="flex h-16 items-center justify-between md:h-24">
+          <div className="flex min-h-16 items-center justify-between py-3 md:min-h-24 md:py-4">
             <Link href="/" className="flex shrink-0 items-center gap-3 md:gap-4">
               <div className="flex h-12 w-12 items-center justify-center rounded-[1.25rem] bg-[#991b1b] shadow-[0_10px_24px_rgba(153,27,27,0.25)] md:h-14 md:w-14">
                 <PiPawPrintFill className="text-white" size={24} />
               </div>
-              <div>
+              <div className="min-w-0 max-w-[15rem] md:max-w-[21rem]">
                 <div className="text-xl font-black tracking-tight text-gray-900 md:text-2xl">
                   {siteName}
                 </div>
-                <div className="text-xs text-gray-400 md:text-[13px]">Kedi ve kopek mamasi</div>
+                <div className="mt-1 text-xs leading-5 text-gray-400 md:text-[13px]">
+                  {siteDescription || 'Kedi ve kopek mamasi'}
+                </div>
               </div>
             </Link>
 

@@ -87,14 +87,6 @@ export default function AdminLoginPage() {
               {loading ? 'Giris yapiliyor...' : 'Giris Yap'}
             </button>
           </form>
-
-          <div className="mt-6 rounded-xl border border-amber-100 bg-amber-50 p-4">
-            <p className="text-center text-xs text-amber-700">
-              <strong>Test hesabi:</strong>
-              <br />
-              admin@kosempetshop.com / admin123456
-            </p>
-          </div>
         </div>
       </div>
     </div>

@@ -6,6 +6,7 @@ import { useSession } from 'next-auth/react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useCartStore } from '@/store/cartStore';
+import { CartQuote } from '@/types';
 import { formatPrice } from '@/lib/utils';
 import { FiLock, FiCreditCard, FiTruck, FiChevronRight, FiUser, FiPhone, FiMail, FiMapPin } from 'react-icons/fi';
 import toast from 'react-hot-toast';
@@ -28,14 +29,11 @@ function CheckoutContent() {
   const searchParams = useSearchParams();
   const { data: session } = useSession();
   const couponCode = searchParams?.get('kupon') ?? '';
-  const { items, getTotalPrice, clearCart } = useCartStore();
+  const { items, clearCart, syncItemsFromQuote } = useCartStore();
   const [loading, setLoading] = useState(false);
   const [step, setStep] = useState<'address' | 'payment'>('address');
   const [checkoutMode, setCheckoutMode] = useState<'guest' | 'member'>('guest');
-
-  const subtotal = getTotalPrice();
-  const shippingCost = subtotal >= FREE_SHIPPING_MIN ? 0 : SHIPPING_COST;
-  const total = subtotal + shippingCost;
+  const [quote, setQuote] = useState<CartQuote | null>(null);
 
   const [form, setForm] = useState({
     name: '',
@@ -69,6 +67,41 @@ function CheckoutContent() {
       email: current.email || session.user?.email || '',
     }));
   }, [session]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadQuote() {
+      if (items.length === 0) {
+        setQuote(null);
+        return;
+      }
+
+      const res = await fetch('/api/cart/quote', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          items: items.map((item) => ({ id: item.id, quantity: item.quantity })),
+        }),
+      });
+
+      const data = await res.json().catch(() => null);
+      if (!cancelled && res.ok) {
+        setQuote(data);
+        syncItemsFromQuote(data.items ?? []);
+      }
+    }
+
+    loadQuote();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [items, syncItemsFromQuote]);
+
+  const subtotal = quote?.subtotal ?? 0;
+  const shippingCost = quote?.shippingCost ?? 0;
+  const total = subtotal + shippingCost;
 
   const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -337,7 +370,7 @@ function CheckoutContent() {
         <div className="card h-fit p-5">
           <h3 className="mb-4 font-bold text-gray-900">Siparis Ozeti</h3>
           <div className="mb-4 max-h-60 space-y-3 overflow-y-auto">
-            {items.map((item) => {
+            {(quote?.items ?? []).map((item) => {
               const price = item.discountPrice ?? item.price;
               return (
                 <div key={item.id} className="flex gap-3">

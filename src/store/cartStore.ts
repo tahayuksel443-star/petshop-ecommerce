@@ -2,7 +2,7 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { CartItem } from '@/types';
+import { CartItem, CartQuoteItem } from '@/types';
 import toast from 'react-hot-toast';
 
 interface CartStore {
@@ -14,6 +14,7 @@ interface CartStore {
   getTotalItems: () => number;
   getTotalPrice: () => number;
   isInCart: (id: string) => boolean;
+  syncItemsFromQuote: (items: CartQuoteItem[]) => void;
 }
 
 export const useCartStore = create<CartStore>()(
@@ -73,6 +74,31 @@ export const useCartStore = create<CartStore>()(
         }, 0),
 
       isInCart: (id) => get().items.some((i) => i.id === id),
+
+      syncItemsFromQuote: (quoteItems) => {
+        const currentItems = get().items;
+        const quoteMap = new Map(quoteItems.map((item) => [item.id, item]));
+
+        const syncedItems = currentItems.reduce<CartItem[]>((acc, item) => {
+            const quotedItem = quoteMap.get(item.id);
+            if (!quotedItem) return acc;
+
+            acc.push({
+              ...item,
+              name: quotedItem.name,
+              slug: quotedItem.slug,
+              image: quotedItem.image,
+              stock: quotedItem.stock,
+              quantity: quotedItem.quantity,
+              price: quotedItem.price,
+              discountPrice: quotedItem.discountPrice ?? null,
+            });
+
+            return acc;
+          }, []);
+
+        set({ items: syncedItems });
+      },
     }),
     {
       name: 'petshop-cart',

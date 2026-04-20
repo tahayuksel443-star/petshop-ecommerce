@@ -1,13 +1,22 @@
 import { redirect } from 'next/navigation';
-import { requireAdminSession } from '@/lib/security';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
 import AdminSidebar from '@/components/admin/AdminSidebar';
 import AdminHeader from '@/components/admin/AdminHeader';
 import AdminMobileNav from '@/components/admin/AdminMobileNav';
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  const session = await requireAdminSession();
+  const session = await getServerSession(authOptions);
 
   if (!session) {
+    return <>{children}</>;
+  }
+
+  const isAdmin =
+    (session.user as { authType?: string }).authType === 'admin' &&
+    ['ADMIN', 'SUPER_ADMIN'].includes((session.user as { role?: string }).role || '');
+
+  if (!isAdmin) {
     redirect('/admin/giris');
   }
 

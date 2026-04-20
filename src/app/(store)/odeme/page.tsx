@@ -120,6 +120,10 @@ function CheckoutContent() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateAddress()) return;
+    if (!quote || quote.items.length === 0) {
+      toast.error('Sepetiniz guncellenirken bir sorun olustu. Lutfen sayfayi yenileyin.');
+      return;
+    }
 
     setLoading(true);
     try {
@@ -127,7 +131,7 @@ function CheckoutContent() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          items,
+          items: quote.items.map((item) => ({ id: item.id, quantity: item.quantity })),
           shippingAddress: form,
           couponCode,
         }),

@@ -97,6 +97,28 @@ export const useCartStore = create<CartStore>()(
             return acc;
           }, []);
 
+        const hasChanged =
+          syncedItems.length !== currentItems.length ||
+          syncedItems.some((item, index) => {
+            const current = currentItems[index];
+            if (!current) return true;
+
+            return (
+              current.id !== item.id ||
+              current.name !== item.name ||
+              current.slug !== item.slug ||
+              current.image !== item.image ||
+              current.stock !== item.stock ||
+              current.quantity !== item.quantity ||
+              current.price !== item.price ||
+              (current.discountPrice ?? null) !== (item.discountPrice ?? null)
+            );
+          });
+
+        if (!hasChanged) {
+          return;
+        }
+
         set({ items: syncedItems });
       },
     }),

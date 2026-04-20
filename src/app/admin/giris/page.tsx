@@ -16,10 +16,15 @@ export default function AdminLoginPage() {
   const [loading, setLoading] = useState(false);
   const [mfaRequired, setMfaRequired] = useState(false);
   const [resendingVerification, setResendingVerification] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<{
+    type: 'success' | 'error' | 'info';
+    text: string;
+  } | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setStatusMessage(null);
 
     const result = await signIn('admin-credentials', {
       email: form.email,
@@ -29,17 +34,39 @@ export default function AdminLoginPage() {
     });
 
     if (result?.ok) {
+      setStatusMessage({
+        type: 'success',
+        text: 'Giris basarili. Yonetim paneline yonlendiriliyorsunuz.',
+      });
       toast.success('Giris basarili');
       router.push('/admin');
     } else if (result?.error === 'MFA_REQUIRED') {
       setMfaRequired(true);
+      setStatusMessage({
+        type: 'info',
+        text: 'Sifreniz dogrulandi. E-posta adresinize gonderilen 6 haneli kodu girerek devam edin.',
+      });
       toast.success('Dogrulama kodu e-posta adresinize gonderildi');
     } else if (result?.error === 'MFA_INVALID') {
       setMfaRequired(true);
+      setStatusMessage({
+        type: 'error',
+        text: 'Dogrulama kodu gecersiz veya suresi dolmus. Gerekirse yeniden giris deneyip yeni kod alin.',
+      });
       toast.error('Dogrulama kodu gecersiz veya suresi dolmus');
     } else if (result?.error === 'EMAIL_NOT_VERIFIED') {
+      setStatusMessage({
+        type: 'error',
+        text: 'Bu admin hesabi icin e-posta dogrulamasi tamamlanmamis. Asagidan dogrulama mailini tekrar gonderebilirsiniz.',
+      });
       toast.error('Admin e-posta adresi henuz dogrulanmamis');
     } else {
+      setStatusMessage({
+        type: 'error',
+        text: mfaRequired
+          ? 'Giris tamamlanamadi. E-posta, sifre veya MFA kodu eslesmiyor olabilir.'
+          : 'Kullanici adi veya sifre hatali. Bilgileri tekrar kontrol edin.',
+      });
       toast.error('E-posta veya sifre hatali');
     }
 
@@ -62,10 +89,21 @@ export default function AdminLoginPage() {
     if (!res.ok) {
       toast.error(data.error || 'Dogrulama maili gonderilemedi');
     } else {
+      setStatusMessage({
+        type: 'info',
+        text: 'Dogrulama e-postasi tekrar gonderildi. Gelen kutunuzu ve spam klasorunu kontrol edin.',
+      });
       toast.success('Admin dogrulama maili gonderildi');
     }
     setResendingVerification(false);
   };
+
+  const statusClassName =
+    statusMessage?.type === 'success'
+      ? 'border-green-200 bg-green-50 text-green-700'
+      : statusMessage?.type === 'info'
+        ? 'border-amber-200 bg-amber-50 text-amber-800'
+        : 'border-red-200 bg-red-50 text-red-700';
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-[#2b160b] via-[#472716] to-[#7c2d12] p-4">
@@ -82,6 +120,12 @@ export default function AdminLoginPage() {
           {searchParams?.get('verified') === '1' ? (
             <div className="mb-4 rounded-2xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
               Admin e-posta adresi dogrulandi. Artik giris yapabilirsiniz.
+            </div>
+          ) : null}
+
+          {statusMessage ? (
+            <div className={`mb-4 rounded-2xl border px-4 py-3 text-sm ${statusClassName}`}>
+              {statusMessage.text}
             </div>
           ) : null}
 

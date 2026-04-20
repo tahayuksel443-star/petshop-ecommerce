@@ -4,7 +4,8 @@ import Link from 'next/link';
 import { FiPackage, FiShoppingBag, FiDollarSign, FiClock, FiAlertTriangle, FiArrowRight } from 'react-icons/fi';
 import { ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS } from '@/types';
 
-export const revalidate = 30;
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 async function getDashboardData() {
   const [totalProducts, totalOrders, pendingOrders, lowStockProducts, recentOrders, totalRevenue] =

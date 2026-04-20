@@ -41,7 +41,7 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
 }
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
-  const limiter = applyRateLimit(`view:${params.id}:${getClientIp(req)}`, 30, 60 * 60 * 1000);
+  const limiter = await applyRateLimit(`view:${params.id}:${getClientIp(req)}`, 30, 60 * 60 * 1000);
   if (!limiter.allowed) return tooManyRequestsResponse();
 
   const product = await prisma.product.update({

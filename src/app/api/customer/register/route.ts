@@ -16,7 +16,7 @@ const registerSchema = z.object({
 });
 
 export async function POST(req: NextRequest) {
-  const limiter = applyRateLimit(`customer-register:${getClientIp(req)}`, 5, 15 * 60 * 1000);
+  const limiter = await applyRateLimit(`customer-register:${getClientIp(req)}`, 5, 15 * 60 * 1000);
   if (!limiter.allowed) return tooManyRequestsResponse();
 
   const parsed = registerSchema.safeParse(await req.json());

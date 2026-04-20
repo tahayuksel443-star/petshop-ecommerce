@@ -33,7 +33,7 @@ function getTransporter() {
 }
 
 export async function POST(req: NextRequest) {
-  const limiter = applyRateLimit(`contact:${getClientIp(req)}`, 8, 10 * 60 * 1000);
+  const limiter = await applyRateLimit(`contact:${getClientIp(req)}`, 8, 10 * 60 * 1000);
   if (!limiter.allowed) {
     return tooManyRequestsResponse('Cok fazla mesaj denemesi yapildi. Lutfen biraz sonra tekrar deneyin.');
   }

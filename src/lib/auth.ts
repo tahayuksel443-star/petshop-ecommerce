@@ -31,12 +31,12 @@ export const authOptions: NextAuthOptions = {
 
         const email = String(credentials.email).trim().toLowerCase();
         const ip = getRequestIp(req);
-        const limiter = applyRateLimit(
+        const limiter = await applyRateLimit(
           `admin-login:${String(credentials.email).toLowerCase()}`,
           5,
           15 * 60 * 1000
         );
-        const ipLimiter = applyRateLimit(`admin-login-ip:${ip}`, 20, 15 * 60 * 1000);
+        const ipLimiter = await applyRateLimit(`admin-login-ip:${ip}`, 20, 15 * 60 * 1000);
 
         if (!limiter.allowed || !ipLimiter.allowed) {
           throw new Error('Cok fazla hatali giris denemesi. Lutfen daha sonra tekrar deneyin');
@@ -75,12 +75,12 @@ export const authOptions: NextAuthOptions = {
 
         const email = String(credentials.email).trim().toLowerCase();
         const ip = getRequestIp(req);
-        const limiter = applyRateLimit(
+        const limiter = await applyRateLimit(
           `customer-login:${String(credentials.email).toLowerCase()}`,
           8,
           15 * 60 * 1000
         );
-        const ipLimiter = applyRateLimit(`customer-login-ip:${ip}`, 30, 15 * 60 * 1000);
+        const ipLimiter = await applyRateLimit(`customer-login-ip:${ip}`, 30, 15 * 60 * 1000);
 
         if (!limiter.allowed || !ipLimiter.allowed) {
           throw new Error('Cok fazla hatali giris denemesi. Lutfen daha sonra tekrar deneyin');

@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Guvenilmeyen istek kaynagi' }, { status: 403 });
   }
 
-  const limiter = applyRateLimit(`payment-create:${ip}`, 10, 10 * 60 * 1000);
+  const limiter = await applyRateLimit(`payment-create:${ip}`, 10, 10 * 60 * 1000);
   if (!limiter.allowed) return tooManyRequestsResponse('Cok fazla odeme denemesi yapildi. Lutfen biraz sonra tekrar deneyin.');
 
   const parsed = paymentSchema.safeParse(await req.json());

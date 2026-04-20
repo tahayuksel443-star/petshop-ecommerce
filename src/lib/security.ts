@@ -8,6 +8,12 @@ type RateLimitEntry = {
 
 const rateLimitStore = new Map<string, RateLimitEntry>();
 
+type RateLimitResult = {
+  allowed: boolean;
+  remaining: number;
+  resetAt: number;
+};
+
 export async function requireAdminSession() {
   const { authOptions } = await import('@/lib/auth');
   const session = await getServerSession(authOptions);
@@ -47,7 +53,7 @@ export function getClientIp(req: NextRequest): string {
   return req.headers.get('x-real-ip') || '127.0.0.1';
 }
 
-export function applyRateLimit(key: string, limit: number, windowMs: number) {
+function applyMemoryRateLimit(key: string, limit: number, windowMs: number): RateLimitResult {
   const now = Date.now();
   const current = rateLimitStore.get(key);
 
@@ -64,6 +70,63 @@ export function applyRateLimit(key: string, limit: number, windowMs: number) {
   rateLimitStore.set(key, current);
 
   return { allowed: true, remaining: limit - current.count, resetAt: current.resetAt };
+}
+
+async function applyRedisRateLimit(key: string, limit: number, windowMs: number): Promise<RateLimitResult | null> {
+  const baseUrl = process.env.UPSTASH_REDIS_REST_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+
+  if (!baseUrl || !token) return null;
+
+  try {
+    const response = await fetch(`${baseUrl}/pipeline`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify([
+        ['INCR', key],
+        ['PTTL', key],
+      ]),
+      cache: 'no-store',
+    });
+
+    if (!response.ok) return null;
+
+    const data = await response.json() as Array<{ result?: number }>;
+    const currentCount = Number(data?.[0]?.result ?? 0);
+    let ttl = Number(data?.[1]?.result ?? -1);
+
+    if (currentCount === 1 || ttl < 0) {
+      await fetch(`${baseUrl}/pexpire/${encodeURIComponent(key)}/${windowMs}`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        cache: 'no-store',
+      });
+      ttl = windowMs;
+    }
+
+    const resetAt = Date.now() + Math.max(ttl, 0);
+    return {
+      allowed: currentCount <= limit,
+      remaining: Math.max(0, limit - currentCount),
+      resetAt,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function applyRateLimit(key: string, limit: number, windowMs: number) {
+  const distributedResult = await applyRedisRateLimit(key, limit, windowMs);
+  if (distributedResult) {
+    return distributedResult;
+  }
+
+  return applyMemoryRateLimit(key, limit, windowMs);
 }
 
 export function tooManyRequestsResponse(message = 'Cok fazla istek gonderildi. Lutfen biraz sonra tekrar deneyin.') {

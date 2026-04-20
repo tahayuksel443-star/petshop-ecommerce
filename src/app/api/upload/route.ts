@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
   const session = await requireAdminSession();
   if (!session) return unauthorizedResponse();
 
-  const limiter = applyRateLimit(`upload:${getClientIp(req)}`, 30, 10 * 60 * 1000);
+  const limiter = await applyRateLimit(`upload:${getClientIp(req)}`, 30, 10 * 60 * 1000);
   if (!limiter.allowed) return tooManyRequestsResponse();
 
   const formData = await req.formData();

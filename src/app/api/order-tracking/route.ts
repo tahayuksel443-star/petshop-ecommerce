@@ -13,7 +13,7 @@ const orderTrackingSchema = z.object({
 });
 
 export async function POST(req: NextRequest) {
-  const limiter = applyRateLimit(`order-tracking:${getClientIp(req)}`, 5, 15 * 60 * 1000);
+  const limiter = await applyRateLimit(`order-tracking:${getClientIp(req)}`, 5, 15 * 60 * 1000);
   if (!limiter.allowed) return tooManyRequestsResponse();
 
   const parsed = orderTrackingSchema.safeParse(await req.json());

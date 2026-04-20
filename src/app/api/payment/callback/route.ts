@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { retrieveCheckoutFormPayment } from '@/lib/iyzico';
+import { releaseOrderResources } from '@/lib/orderReservations';
 import { applyRateLimit, getClientIp, tooManyRequestsResponse } from '@/lib/security';
 
 export const runtime = 'nodejs';
@@ -22,41 +23,9 @@ function amountsMatch(expected: number, actual: unknown) {
   return Math.abs(expected - numericActual) < 0.01;
 }
 
-async function releaseOrderResources(orderId: string) {
-  await prisma.$transaction(async (tx) => {
-    const order = await tx.order.findUnique({
-      where: { id: orderId },
-      include: { items: true },
-    });
-
-    if (!order || order.status === 'CANCELLED') return;
-
-    for (const item of order.items) {
-      await tx.product.update({
-        where: { id: item.productId },
-        data: {
-          stock: { increment: item.quantity },
-        },
-      });
-    }
-
-    if (order.couponCode) {
-      await tx.coupon.updateMany({
-        where: { code: order.couponCode, usedCount: { gt: 0 } },
-        data: { usedCount: { decrement: 1 } },
-      });
-    }
-
-    await tx.order.update({
-      where: { id: order.id },
-      data: { paymentStatus: 'FAILED', status: 'CANCELLED' },
-    });
-  });
-}
-
 export async function POST(req: NextRequest) {
   const ip = getClientIp(req);
-  const limiter = applyRateLimit(`payment-callback:${ip}`, 30, 10 * 60 * 1000);
+  const limiter = await applyRateLimit(`payment-callback:${ip}`, 30, 10 * 60 * 1000);
   if (!limiter.allowed) return tooManyRequestsResponse();
 
   const formData = await req.formData();

@@ -1,13 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { completeThreeDSPayment } from '@/lib/iyzico';
+import { completeThreeDSPayment, retrievePayment } from '@/lib/iyzico';
 import { applyRateLimit, getClientIp, tooManyRequestsResponse } from '@/lib/security';
 
 export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 function redirectTo(path: string) {
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
   return NextResponse.redirect(`${siteUrl}${path}`);
+}
+
+function isSuccessfulPaymentState(value: unknown) {
+  return String(value || '').toLowerCase() === 'success';
+}
+
+function amountsMatch(expected: number, actual: unknown) {
+  const numericActual = Number(actual);
+  if (!Number.isFinite(numericActual)) return false;
+  return Math.abs(expected - numericActual) < 0.01;
 }
 
 export async function POST(req: NextRequest) {
@@ -55,6 +67,23 @@ export async function POST(req: NextRequest) {
     });
 
     if (result.status !== 'success') {
+      await prisma.order.update({
+        where: { id: existingOrder.id },
+        data: { paymentStatus: 'FAILED', status: 'CANCELLED' },
+      });
+      return redirectTo('/odeme/basarisiz');
+    }
+
+    const verifiedPayment = await retrievePayment(paymentId);
+
+    if (
+      !isSuccessfulPaymentState(verifiedPayment?.status) ||
+      !isSuccessfulPaymentState(verifiedPayment?.paymentStatus) ||
+      (verifiedPayment?.conversationId && String(verifiedPayment.conversationId) !== conversationId) ||
+      (verifiedPayment?.basketId && String(verifiedPayment.basketId) !== existingOrder.orderNumber) ||
+      !amountsMatch(Number(existingOrder.totalAmount), verifiedPayment?.paidPrice) ||
+      (verifiedPayment?.currency && String(verifiedPayment.currency).toUpperCase() !== 'TRY')
+    ) {
       await prisma.order.update({
         where: { id: existingOrder.id },
         data: { paymentStatus: 'FAILED', status: 'CANCELLED' },

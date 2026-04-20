@@ -5,10 +5,12 @@ import { prisma } from '@/lib/prisma';
 import { createThreeDSPayment } from '@/lib/iyzico';
 import { generateOrderNumber } from '@/lib/utils';
 import { v4 as uuidv4 } from 'uuid';
-import { applyRateLimit, getClientIp, tooManyRequestsResponse } from '@/lib/security';
+import { applyRateLimit, getClientIp, hasTrustedOrigin, tooManyRequestsResponse } from '@/lib/security';
 import { authOptions } from '@/lib/auth';
 
 export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 const paymentSchema = z.object({
   items: z.array(
@@ -51,6 +53,12 @@ export async function POST(req: NextRequest) {
       ? session.user
       : null;
   const ip = getClientIp(req);
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
+
+  if (!hasTrustedOrigin(req, siteUrl)) {
+    return NextResponse.json({ error: 'Guvenilmeyen istek kaynagi' }, { status: 403 });
+  }
+
   const limiter = applyRateLimit(`payment-create:${ip}`, 10, 10 * 60 * 1000);
   if (!limiter.allowed) return tooManyRequestsResponse('Cok fazla odeme denemesi yapildi. Lutfen biraz sonra tekrar deneyin.');
 
@@ -155,10 +163,11 @@ export async function POST(req: NextRequest) {
     price: (unitPrice * quantity).toFixed(2),
   }));
 
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
   if (!siteUrl) {
     return NextResponse.json({ error: 'Odeme ortami eksik ayarlanmis' }, { status: 500 });
   }
+
+  const normalizedEmail = shippingAddress.email.trim().toLowerCase();
 
   const paymentRequest = {
     locale: 'tr',
@@ -176,7 +185,7 @@ export async function POST(req: NextRequest) {
       name: shippingAddress.name,
       surname: shippingAddress.surname,
       gsmNumber: normalizePhone(shippingAddress.phone),
-      email: shippingAddress.email,
+      email: normalizedEmail,
       identityNumber: '11111111111',
       registrationAddress: `${shippingAddress.address}, ${shippingAddress.district}/${shippingAddress.city}`,
       ip,
@@ -229,7 +238,7 @@ export async function POST(req: NextRequest) {
         couponCode: appliedCouponCode,
         shippingAddress,
         customerName: `${shippingAddress.name} ${shippingAddress.surname}`,
-        customerEmail: shippingAddress.email,
+        customerEmail: normalizedEmail,
         customerPhone: shippingAddress.phone,
         customerId: customerSession?.id,
         notes: shippingAddress.notes || null,

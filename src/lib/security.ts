@@ -73,3 +73,25 @@ export function tooManyRequestsResponse(message = 'Cok fazla istek gonderildi. L
 export function unauthorizedResponse() {
   return NextResponse.json({ error: 'Yetkisiz erisim' }, { status: 401 });
 }
+
+export function hasTrustedOrigin(req: NextRequest, trustedSiteUrl?: string | null) {
+  if (!trustedSiteUrl) return true;
+
+  try {
+    const trustedOrigin = new URL(trustedSiteUrl).origin;
+    const requestOrigin = req.headers.get('origin');
+    const referer = req.headers.get('referer');
+
+    if (requestOrigin) {
+      return requestOrigin === trustedOrigin;
+    }
+
+    if (referer) {
+      return new URL(referer).origin === trustedOrigin;
+    }
+
+    return true;
+  } catch {
+    return false;
+  }
+}

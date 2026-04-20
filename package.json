@@ -21,6 +21,7 @@
     "iyzipay": "^2.0.51",
     "next": "^14.2.35",
     "next-auth": "^4.24.7",
+    "nodemailer": "^7.0.13",
     "react": "^18",
     "react-dom": "^18",
     "react-hot-toast": "^2.4.1",
@@ -33,6 +34,7 @@
   },
   "devDependencies": {
     "@types/node": "^20",
+    "@types/nodemailer": "^8.0.0",
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "@types/uuid": "^9.0.8",

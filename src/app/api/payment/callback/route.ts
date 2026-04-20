@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { completeThreeDSPayment, retrievePayment } from '@/lib/iyzico';
+import { retrieveCheckoutFormPayment } from '@/lib/iyzico';
 import { applyRateLimit, getClientIp, tooManyRequestsResponse } from '@/lib/security';
 
 export const runtime = 'nodejs';
@@ -22,23 +22,54 @@ function amountsMatch(expected: number, actual: unknown) {
   return Math.abs(expected - numericActual) < 0.01;
 }
 
+async function releaseOrderResources(orderId: string) {
+  await prisma.$transaction(async (tx) => {
+    const order = await tx.order.findUnique({
+      where: { id: orderId },
+      include: { items: true },
+    });
+
+    if (!order || order.status === 'CANCELLED') return;
+
+    for (const item of order.items) {
+      await tx.product.update({
+        where: { id: item.productId },
+        data: {
+          stock: { increment: item.quantity },
+        },
+      });
+    }
+
+    if (order.couponCode) {
+      await tx.coupon.updateMany({
+        where: { code: order.couponCode, usedCount: { gt: 0 } },
+        data: { usedCount: { decrement: 1 } },
+      });
+    }
+
+    await tx.order.update({
+      where: { id: order.id },
+      data: { paymentStatus: 'FAILED', status: 'CANCELLED' },
+    });
+  });
+}
+
 export async function POST(req: NextRequest) {
   const ip = getClientIp(req);
   const limiter = applyRateLimit(`payment-callback:${ip}`, 30, 10 * 60 * 1000);
   if (!limiter.allowed) return tooManyRequestsResponse();
 
   const formData = await req.formData();
-  const paymentId = String(formData.get('paymentId') || '');
-  const conversationData = String(formData.get('conversationData') || '');
+  const token = String(formData.get('token') || '');
   const conversationId = String(formData.get('conversationId') || '');
   const status = String(formData.get('status') || '');
 
-  if (!conversationId) {
+  if (!token) {
     return redirectTo('/odeme/basarisiz');
   }
 
   const existingOrder = await prisma.order.findFirst({
-    where: { paymentId: conversationId },
+    where: { paymentId: token },
     include: { items: true },
   });
 
@@ -50,100 +81,52 @@ export async function POST(req: NextRequest) {
     return redirectTo(`/odeme/basarili?siparis=${existingOrder.orderNumber}${existingOrder.trackingToken ? `&takip=${existingOrder.trackingToken}` : ''}`);
   }
 
-  if (status !== 'success' || !paymentId || !conversationData) {
-    await prisma.order.update({
-      where: { id: existingOrder.id },
-      data: { paymentStatus: 'FAILED', status: 'CANCELLED' },
-    });
+  if (status !== 'success') {
+    await releaseOrderResources(existingOrder.id);
     return redirectTo('/odeme/basarisiz');
   }
 
   try {
-    const result = await completeThreeDSPayment({
+    const result = await retrieveCheckoutFormPayment({
       locale: 'tr',
       conversationId,
-      paymentId,
-      conversationData,
+      token,
     });
 
     if (result.status !== 'success') {
-      await prisma.order.update({
-        where: { id: existingOrder.id },
-        data: { paymentStatus: 'FAILED', status: 'CANCELLED' },
-      });
+      await releaseOrderResources(existingOrder.id);
       return redirectTo('/odeme/basarisiz');
     }
-
-    const verifiedPayment = await retrievePayment(paymentId);
 
     if (
-      !isSuccessfulPaymentState(verifiedPayment?.status) ||
-      !isSuccessfulPaymentState(verifiedPayment?.paymentStatus) ||
-      (verifiedPayment?.conversationId && String(verifiedPayment.conversationId) !== conversationId) ||
-      (verifiedPayment?.basketId && String(verifiedPayment.basketId) !== existingOrder.orderNumber) ||
-      !amountsMatch(Number(existingOrder.totalAmount), verifiedPayment?.paidPrice) ||
-      (verifiedPayment?.currency && String(verifiedPayment.currency).toUpperCase() !== 'TRY')
+      !isSuccessfulPaymentState(result?.status) ||
+      !isSuccessfulPaymentState(result?.paymentStatus) ||
+      (result?.conversationId && String(result.conversationId) !== conversationId) ||
+      (result?.basketId && String(result.basketId) !== existingOrder.orderNumber) ||
+      !amountsMatch(Number(existingOrder.totalAmount), result?.paidPrice) ||
+      (result?.currency && String(result.currency).toUpperCase() !== 'TRY')
     ) {
-      await prisma.order.update({
-        where: { id: existingOrder.id },
-        data: { paymentStatus: 'FAILED', status: 'CANCELLED' },
-      });
+      await releaseOrderResources(existingOrder.id);
       return redirectTo('/odeme/basarisiz');
     }
-
-    await prisma.$transaction(async (tx) => {
-      const order = await tx.order.findUnique({
-        where: { id: existingOrder.id },
-        include: { items: true },
-      });
-
-      if (!order) throw new Error('Order not found');
-      if (order.paymentStatus === 'SUCCESS') return;
-
-      for (const item of order.items) {
-        const updated = await tx.product.updateMany({
-          where: {
-            id: item.productId,
-            stock: { gte: item.quantity },
-          },
-          data: {
-            stock: { decrement: item.quantity },
-          },
-        });
-
-        if (updated.count === 0) {
-          throw new Error(`Insufficient stock for product ${item.productId}`);
-        }
-      }
-
-      if (order.couponCode) {
-        await tx.coupon.updateMany({
-          where: { code: order.couponCode, isActive: true },
-          data: { usedCount: { increment: 1 } },
-        });
-      }
-
-      await tx.order.update({
-        where: { id: order.id },
-        data: {
-          paymentStatus: 'SUCCESS',
-          status: 'PREPARING',
-          paymentMethod: `${result.cardFamily || 'Kart'} **** ${result.lastFourDigits || ''}`.trim(),
-        },
-      });
-    });
-
-    return redirectTo(`/odeme/basarili?siparis=${existingOrder.orderNumber}${existingOrder.trackingToken ? `&takip=${existingOrder.trackingToken}` : ''}`);
-  } catch (error) {
-    console.error('3DS callback error:', error);
 
     await prisma.order.updateMany({
       where: {
         id: existingOrder.id,
         paymentStatus: 'PENDING',
       },
-      data: { paymentStatus: 'FAILED', status: 'CANCELLED' },
+      data: {
+        paymentStatus: 'SUCCESS',
+        status: 'PREPARING',
+        paymentMethod: `${result.cardFamily || 'Kart'} **** ${result.lastFourDigits || ''}`.trim(),
+      },
     });
+
+    return redirectTo(`/odeme/basarili?siparis=${existingOrder.orderNumber}${existingOrder.trackingToken ? `&takip=${existingOrder.trackingToken}` : ''}`);
+  } catch (error) {
+    console.error('3DS callback error:', error);
+
+    await releaseOrderResources(existingOrder.id);
 
     return redirectTo('/odeme/basarisiz');
   }

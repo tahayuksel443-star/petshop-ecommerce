@@ -8,11 +8,8 @@ import Link from 'next/link';
 import { useCartStore } from '@/store/cartStore';
 import { CartQuote } from '@/types';
 import { formatPrice } from '@/lib/utils';
-import { FiLock, FiCreditCard, FiTruck, FiChevronRight, FiUser, FiPhone, FiMail, FiMapPin } from 'react-icons/fi';
+import { FiLock, FiTruck, FiChevronRight, FiUser, FiPhone, FiMail, FiMapPin, FiShield } from 'react-icons/fi';
 import toast from 'react-hot-toast';
-
-const FREE_SHIPPING_MIN = 250;
-const SHIPPING_COST = 29.9;
 
 const CITIES = ['Adana','Adiyaman','Afyon','Agri','Amasya','Ankara','Antalya','Artvin','Aydin','Balikesir','Bilecik','Bingol','Bitlis','Bolu','Burdur','Bursa','Canakkale','Cankiri','Corum','Denizli','Diyarbakir','Edirne','Elazig','Erzincan','Erzurum','Eskisehir','Gaziantep','Giresun','Gumushane','Hakkari','Hatay','Isparta','Istanbul','Izmir','Kars','Kastamonu','Kayseri','Kirklareli','Kirsehir','Kocaeli','Konya','Kutahya','Malatya','Manisa','Kahramanmaras','Mardin','Mugla','Mus','Nevsehir','Nigde','Ordu','Rize','Sakarya','Samsun','Siirt','Sinop','Sivas','Tekirdag','Tokat','Trabzon','Tunceli','Sanliurfa','Usak','Van','Yozgat','Zonguldak','Aksaray','Bayburt','Karaman','Kirikkale','Batman','Sirnak','Bartin','Ardahan','Igdir','Yalova','Karabuk','Kilis','Osmaniye','Duzce'];
 
@@ -34,7 +31,6 @@ function CheckoutContent() {
   const [step, setStep] = useState<'address' | 'payment'>('address');
   const [checkoutMode, setCheckoutMode] = useState<'guest' | 'member'>('guest');
   const [quote, setQuote] = useState<CartQuote | null>(null);
-
   const [form, setForm] = useState({
     name: '',
     surname: '',
@@ -44,14 +40,6 @@ function CheckoutContent() {
     district: '',
     address: '',
     notes: '',
-  });
-
-  const [card, setCard] = useState({
-    number: '',
-    holder: '',
-    expireMonth: '',
-    expireYear: '',
-    cvc: '',
   });
 
   useEffect(() => {
@@ -107,15 +95,6 @@ function CheckoutContent() {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
-  const handleCardChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    let value = e.target.value;
-    if (e.target.name === 'number') value = value.replace(/\D/g, '').replace(/(.{4})/g, '$1 ').trim().slice(0, 19);
-    if (e.target.name === 'cvc') value = value.replace(/\D/g, '').slice(0, 3);
-    if (e.target.name === 'expireMonth') value = value.replace(/\D/g, '').slice(0, 2);
-    if (e.target.name === 'expireYear') value = value.replace(/\D/g, '').slice(0, 4);
-    setCard({ ...card, [e.target.name]: value });
-  };
-
   const validateAddress = () => {
     const required = ['name', 'surname', 'email', 'phone', 'city', 'district', 'address'];
     for (const field of required) {
@@ -124,24 +103,23 @@ function CheckoutContent() {
         return false;
       }
     }
+
     if (!form.email.includes('@')) {
       toast.error('Gecerli bir e-posta girin');
       return false;
     }
+
     if (form.phone.replace(/\D/g, '').length < 10) {
       toast.error('Gecerli bir telefon numarasi girin');
       return false;
     }
+
     return true;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateAddress()) return;
-    if (!card.number || !card.holder || !card.expireMonth || !card.expireYear || !card.cvc) {
-      toast.error('Lutfen kart bilgilerini eksiksiz doldurun');
-      return;
-    }
 
     setLoading(true);
     try {
@@ -151,37 +129,18 @@ function CheckoutContent() {
         body: JSON.stringify({
           items,
           shippingAddress: form,
-          card: {
-            cardHolderName: card.holder,
-            cardNumber: card.number.replace(/\s/g, ''),
-            expireMonth: card.expireMonth,
-            expireYear: card.expireYear,
-            cvc: card.cvc,
-          },
           couponCode,
         }),
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
 
-      if (data.status === 'success' && data.threeDSHtmlContent) {
-        const form3DS = document.createElement('div');
-        form3DS.innerHTML = data.threeDSHtmlContent;
-        document.body.appendChild(form3DS);
-        const formEl = form3DS.querySelector('form');
-        if (formEl) {
-          formEl.submit();
-        } else {
-          router.push(`/odeme/basarili?siparis=${data.orderNumber}`);
-          clearCart();
-        }
-      } else if (data.orderNumber) {
-        router.push(`/odeme/basarili?siparis=${data.orderNumber}`);
-        clearCart();
-      } else {
-        toast.error(data.errorMessage || data.error || 'Odeme islemi basarisiz');
-        router.push('/odeme/basarisiz');
+      if (data.status === 'success' && data.paymentPageUrl) {
+        window.location.href = data.paymentPageUrl;
+        return;
       }
+
+      toast.error(data.errorMessage || data.error || 'Odeme islemi baslatilamadi');
     } catch {
       toast.error('Bir hata olustu, lutfen tekrar deneyin');
     } finally {
@@ -208,7 +167,7 @@ function CheckoutContent() {
             <button
               type="button"
               onClick={() => setCheckoutMode('guest')}
-              className={`rounded-2xl px-4 py-2 text-sm font-semibold transition-colors ${checkoutMode === 'guest' ? 'bg-[#991b1b] text-white' : 'bg-white text-gray-700 border border-[#eadbc8]'}`}
+              className={`rounded-2xl px-4 py-2 text-sm font-semibold transition-colors ${checkoutMode === 'guest' ? 'bg-[#991b1b] text-white' : 'border border-[#eadbc8] bg-white text-gray-700'}`}
             >
               Uyeliksiz Devam Et
             </button>
@@ -221,20 +180,24 @@ function CheckoutContent() {
           </div>
         </div>
         {checkoutMode === 'member' ? (
-          <p className="mt-3 text-sm text-green-700">Hesabinizla devam ediyorsunuz. Bu siparis hesabinizdaki siparislerim alanina dusacak.</p>
+          <p className="mt-3 text-sm text-green-700">Hesabinizla devam ediyorsunuz. Bu siparis hesabinizdaki siparislerim alanina dusecek.</p>
         ) : (
-          <p className="mt-3 text-sm text-amber-700">Misafir olarak devam ediyorsunuz. Siparis takibi icin siparis numarasi ve e-posta kullanabilirsiniz.</p>
+          <p className="mt-3 text-sm text-amber-700">Misafir olarak devam ediyorsunuz. Siparis takibi icin takip kodu ve e-posta kullanabilirsiniz.</p>
         )}
       </div>
 
       <div className="mb-8 flex items-center gap-3">
-        {['Teslimat Bilgileri', 'Odeme'].map((s, i) => (
+        {['Teslimat Bilgileri', 'Guvenli Odeme'].map((s, i) => (
           <div key={s} className="flex items-center gap-3">
-            <button onClick={() => i === 0 && setStep('address')} className={`flex items-center gap-2 text-sm font-medium transition-colors ${((i === 0 && step === 'address') || (i === 1 && step === 'payment')) ? 'text-primary-600' : 'text-gray-400'}`}>
+            <button
+              type="button"
+              onClick={() => i === 0 && setStep('address')}
+              className={`flex items-center gap-2 text-sm font-medium transition-colors ${((i === 0 && step === 'address') || (i === 1 && step === 'payment')) ? 'text-primary-600' : 'text-gray-400'}`}
+            >
               <span className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold transition-colors ${((i === 0 && step === 'address') || (i === 1 && step === 'payment')) ? 'bg-primary-500 text-white' : 'bg-gray-200 text-gray-500'}`}>{i + 1}</span>
               <span className="hidden sm:inline">{s}</span>
             </button>
-            {i === 0 && <FiChevronRight size={14} className="text-gray-300" />}
+            {i === 0 ? <FiChevronRight size={14} className="text-gray-300" /> : null}
           </div>
         ))}
       </div>
@@ -242,7 +205,7 @@ function CheckoutContent() {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">
           <form onSubmit={handleSubmit}>
-            {step === 'address' && (
+            {step === 'address' ? (
               <div className="card p-6">
                 <h2 className="mb-5 flex items-center gap-2 text-lg font-bold text-gray-900">
                   <FiTruck className="text-primary-500" size={20} />
@@ -298,68 +261,42 @@ function CheckoutContent() {
                   </div>
                 </div>
                 <button type="button" onClick={() => { if (validateAddress()) setStep('payment'); }} className="btn-primary mt-6 w-full justify-center py-3.5">
-                  Odeme Adimina Gec
+                  Guvenli Odeme Adimina Gec
                   <FiChevronRight size={18} />
                 </button>
               </div>
-            )}
-
-            {step === 'payment' && (
+            ) : (
               <div className="card p-6">
                 <h2 className="mb-5 flex items-center gap-2 text-lg font-bold text-gray-900">
-                  <FiCreditCard className="text-primary-500" size={20} />
-                  Kart Bilgileri
+                  <FiShield className="text-primary-500" size={20} />
+                  Iyzico Guvenli Odeme
                 </h2>
 
-                <div className="mb-6 rounded-2xl bg-gradient-to-br from-gray-800 to-gray-900 p-5 text-white">
-                  <p className="mb-4 text-xs text-gray-400">Kart Onizlemesi</p>
-                  <p className="mb-4 font-mono text-xl tracking-widest">{card.number || '•••• •••• •••• ••••'}</p>
-                  <div className="flex items-end justify-between">
-                    <div>
-                      <p className="text-xs text-gray-400">Kart Sahibi</p>
-                      <p className="font-medium">{card.holder || 'AD SOYAD'}</p>
+                <div className="rounded-3xl border border-[#eadbc8] bg-[#fffaf5] p-5">
+                  <div className="flex items-start gap-3">
+                    <div className="rounded-2xl bg-white p-3 shadow-sm">
+                      <FiLock className="text-green-600" size={20} />
                     </div>
                     <div>
-                      <p className="text-xs text-gray-400">Son Kullanma</p>
-                      <p className="font-medium">{card.expireMonth || 'AA'}/{card.expireYear?.slice(-2) || 'YY'}</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  <div>
-                    <label className="mb-1.5 block text-sm font-medium text-gray-700">Kart Numarasi *</label>
-                    <input name="number" value={card.number} onChange={handleCardChange} placeholder="0000 0000 0000 0000" className="input-field font-mono tracking-wider" maxLength={19} required />
-                  </div>
-                  <div>
-                    <label className="mb-1.5 block text-sm font-medium text-gray-700">Kart Uzerindeki Ad *</label>
-                    <input name="holder" value={card.holder} onChange={handleCardChange} placeholder="Ad Soyad" className="input-field uppercase" required />
-                  </div>
-                  <div className="grid grid-cols-3 gap-3">
-                    <div>
-                      <label className="mb-1.5 block text-sm font-medium text-gray-700">Ay *</label>
-                      <input name="expireMonth" value={card.expireMonth} onChange={handleCardChange} placeholder="MM" className="input-field text-center font-mono" maxLength={2} required />
-                    </div>
-                    <div>
-                      <label className="mb-1.5 block text-sm font-medium text-gray-700">Yil *</label>
-                      <input name="expireYear" value={card.expireYear} onChange={handleCardChange} placeholder="YYYY" className="input-field text-center font-mono" maxLength={4} required />
-                    </div>
-                    <div>
-                      <label className="mb-1.5 block text-sm font-medium text-gray-700">CVV *</label>
-                      <input name="cvc" value={card.cvc} onChange={handleCardChange} placeholder="•••" type="password" className="input-field text-center font-mono" maxLength={3} required />
+                      <p className="text-base font-semibold text-gray-900">Kart bilgileriniz sitemize girilmeyecek</p>
+                      <p className="mt-2 text-sm leading-6 text-gray-600">
+                        Odemeyi bir sonraki adimda iyzico tarafindaki guvenli odeme ekraninda tamamlayacaksiniz.
+                        Kart numarasi, son kullanma tarihi ve CVV bilgileri uygulamamiz yerine iyzico tarafinda islenecek.
+                      </p>
                     </div>
                   </div>
                 </div>
 
-                <div className="mt-4 flex items-center gap-2 rounded-xl bg-green-50 p-3">
-                  <FiLock className="shrink-0 text-green-500" size={16} />
-                  <p className="text-xs text-green-700">Odeme bilgileriniz <strong>iyzico</strong> tarafindan 256-bit SSL ile sifrelenerek korunmaktadir.</p>
+                <div className="mt-4 rounded-2xl bg-green-50 p-4 text-sm text-green-800">
+                  Odeme baslatildiginda stok ve kupon bilgileriniz sunucu tarafinda guvenli sekilde yeniden dogrulanir.
                 </div>
 
                 <div className="mt-6 flex gap-3">
-                  <button type="button" onClick={() => setStep('address')} className="btn-secondary px-5 py-3.5">Geri</button>
+                  <button type="button" onClick={() => setStep('address')} className="btn-secondary px-5 py-3.5">
+                    Geri
+                  </button>
                   <button type="submit" disabled={loading} className="btn-primary flex-1 justify-center py-3.5 text-base">
-                    {loading ? (<><span className="spinner h-5 w-5" />Isleniyor...</>) : (<><FiLock size={18} />{formatPrice(total)} Ode</>)}
+                    {loading ? <><span className="spinner h-5 w-5" />Iyzico sayfasi hazirlaniyor...</> : <><FiLock size={18} />{formatPrice(total)} Icin Guvenli Odemeye Git</>}
                   </button>
                 </div>
               </div>

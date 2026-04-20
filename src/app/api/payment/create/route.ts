@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
-import { createThreeDSPayment } from '@/lib/iyzico';
+import { createCheckoutFormPayment } from '@/lib/iyzico';
 import { generateOrderNumber, generateTrackingToken } from '@/lib/utils';
 import { v4 as uuidv4 } from 'uuid';
 import { applyRateLimit, getClientIp, hasTrustedOrigin, tooManyRequestsResponse } from '@/lib/security';
@@ -28,13 +28,6 @@ const paymentSchema = z.object({
     city: z.string().trim().min(2).max(80),
     district: z.string().trim().min(2).max(80),
     notes: z.string().trim().max(500).optional().nullable(),
-  }),
-  card: z.object({
-    cardHolderName: z.string().trim().min(2).max(80),
-    cardNumber: z.string().trim().regex(/^\d{12,19}$/),
-    expireMonth: z.string().trim().regex(/^(0[1-9]|1[0-2])$/),
-    expireYear: z.string().trim().regex(/^\d{2,4}$/),
-    cvc: z.string().trim().regex(/^\d{3,4}$/),
   }),
   couponCode: z.string().trim().max(50).optional().nullable(),
 });
@@ -67,7 +60,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Gecersiz odeme bilgisi' }, { status: 400 });
   }
 
-  const { items, shippingAddress, card, couponCode } = parsed.data;
+  const { items, shippingAddress, couponCode } = parsed.data;
 
   const productIds = items.map((item) => item.id);
   const [products, settings] = await Promise.all([
@@ -89,7 +82,11 @@ export async function POST(req: NextRequest) {
   }
 
   const productMap = new Map(products.map((product) => [product.id, product]));
-  const normalizedItems = [];
+  const normalizedItems: Array<{
+    product: (typeof products)[number];
+    quantity: number;
+    unitPrice: number;
+  }> = [];
   let subtotal = 0;
 
   for (const item of items) {
@@ -117,6 +114,7 @@ export async function POST(req: NextRequest) {
 
   let discountAmount = 0;
   let appliedCouponCode: string | null = null;
+  let appliedCouponMaxUses: number | null = null;
 
   if (couponCode) {
     const coupon = await prisma.coupon.findFirst({
@@ -149,6 +147,7 @@ export async function POST(req: NextRequest) {
 
     discountAmount = Math.min(discountAmount, subtotal);
     appliedCouponCode = coupon.code;
+    appliedCouponMaxUses = coupon.maxUses;
   }
 
   const finalAmount = Number((subtotal + shippingCost - discountAmount).toFixed(2));
@@ -206,20 +205,12 @@ export async function POST(req: NextRequest) {
       address: `${shippingAddress.address}, ${shippingAddress.district}`,
     },
     basketItems,
-    paymentCard: {
-      cardHolderName: card.cardHolderName,
-      cardNumber: card.cardNumber,
-      expireMonth: card.expireMonth,
-      expireYear: card.expireYear,
-      cvc: card.cvc,
-      registerCard: '0',
-    },
   };
 
   try {
-    const result = await createThreeDSPayment(paymentRequest as never);
+    const result = await createCheckoutFormPayment(paymentRequest as never);
 
-    if (result.status !== 'success' || !result.threeDSHtmlContent) {
+    if (result.status !== 'success' || !result.token || !result.paymentPageUrl) {
       return NextResponse.json({
         status: 'error',
         errorMessage: result.errorMessage || 'Odeme baslatilamadi',
@@ -227,37 +218,78 @@ export async function POST(req: NextRequest) {
       }, { status: 400 });
     }
 
-    await prisma.order.create({
-      data: {
-        orderNumber,
-        trackingToken,
-        status: 'PENDING',
-        paymentStatus: 'PENDING',
-        paymentId: conversationId,
-        totalAmount: finalAmount,
-        shippingCost,
-        discountAmount,
-        couponCode: appliedCouponCode,
-        shippingAddress,
-        customerName: `${shippingAddress.name} ${shippingAddress.surname}`,
-        customerEmail: normalizedEmail,
-        customerPhone: shippingAddress.phone,
-        customerId: customerSession?.id,
-        notes: shippingAddress.notes || null,
-        items: {
-          create: normalizedItems.map(({ product, quantity, unitPrice }) => ({
-            productId: product.id,
-            productName: product.name,
-            quantity,
-            price: unitPrice,
-          })),
+    await prisma.$transaction(async (tx) => {
+      for (const { product, quantity } of normalizedItems) {
+        const updated = await tx.product.updateMany({
+          where: {
+            id: product.id,
+            isActive: true,
+            stock: { gte: quantity },
+          },
+          data: {
+            stock: { decrement: quantity },
+          },
+        });
+
+        if (updated.count === 0) {
+          throw new Error(`${product.name} icin yeterli stok kalmadi`);
+        }
+      }
+
+      if (appliedCouponCode) {
+        const couponWhere =
+          appliedCouponMaxUses == null
+            ? { code: appliedCouponCode, isActive: true }
+            : {
+                code: appliedCouponCode,
+                isActive: true,
+                usedCount: { lt: appliedCouponMaxUses },
+              };
+
+        const couponReserved = await tx.coupon.updateMany({
+          where: couponWhere,
+          data: {
+            usedCount: { increment: 1 },
+          },
+        });
+
+        if (couponReserved.count === 0) {
+          throw new Error('Kupon kullanim limiti doldu');
+        }
+      }
+
+      await tx.order.create({
+        data: {
+          orderNumber,
+          trackingToken,
+          status: 'PENDING',
+          paymentStatus: 'PENDING',
+          paymentId: result.token,
+          totalAmount: finalAmount,
+          shippingCost,
+          discountAmount,
+          couponCode: appliedCouponCode,
+          shippingAddress,
+          customerName: `${shippingAddress.name} ${shippingAddress.surname}`,
+          customerEmail: normalizedEmail,
+          customerPhone: shippingAddress.phone,
+          customerId: customerSession?.id,
+          notes: shippingAddress.notes || null,
+          items: {
+            create: normalizedItems.map(({ product, quantity, unitPrice }) => ({
+              productId: product.id,
+              productName: product.name,
+              quantity,
+              price: unitPrice,
+            })),
+          },
         },
-      },
+      });
     });
 
     return NextResponse.json({
       status: 'success',
-      threeDSHtmlContent: result.threeDSHtmlContent,
+      paymentPageUrl: result.paymentPageUrl,
       orderNumber,
       trackingToken,
     });

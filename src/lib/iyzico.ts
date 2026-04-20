@@ -5,6 +5,7 @@ const iyzipay = new Iyzipay({
   secretKey: process.env.IYZICO_SECRET_KEY || '',
   uri: process.env.IYZICO_BASE_URL || 'https://sandbox-api.iyzipay.com',
 });
+const iyzipayClient = iyzipay as any;
 
 export interface IyzicoPaymentRequest {
   price: string;
@@ -53,9 +54,9 @@ export interface IyzicoPaymentRequest {
   }>;
 }
 
-export async function createThreeDSPayment(request: IyzicoPaymentRequest): Promise<any> {
+export async function createCheckoutFormPayment(request: IyzicoPaymentRequest): Promise<any> {
   return new Promise((resolve, reject) => {
-    iyzipay.threedsInitialize.create(request, (err: any, result: any) => {
+    iyzipayClient.checkoutFormInitialize.create(request, (err: any, result: any) => {
       if (err) {
         reject(err);
       } else {
@@ -65,14 +66,13 @@ export async function createThreeDSPayment(request: IyzicoPaymentRequest): Promi
   });
 }
 
-export async function completeThreeDSPayment(data: {
+export async function retrieveCheckoutFormPayment(data: {
   locale: string;
   conversationId: string;
-  paymentId: string;
-  conversationData: string;
+  token: string;
 }): Promise<any> {
   return new Promise((resolve, reject) => {
-    iyzipay.threedsPayment.create(data, (err: any, result: any) => {
+    iyzipayClient.checkoutForm.retrieve(data, (err: any, result: any) => {
       if (err) {
         reject(err);
       } else {

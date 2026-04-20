@@ -2,6 +2,7 @@ import { NextAuthOptions } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import bcrypt from 'bcryptjs';
 import { applyRateLimit } from './security';
+import { issueAdminMfaCode, sendAdminMfaEmail, verifyAdminMfaCode } from './accountSecurity';
 
 function getRequestIp(req: unknown) {
   if (!req || typeof req !== 'object' || !('headers' in req)) return 'unknown';
@@ -23,6 +24,7 @@ export const authOptions: NextAuthOptions = {
       credentials: {
         email: { label: 'Email', type: 'email' },
         password: { label: 'Sifre', type: 'password' },
+        otp: { label: 'Dogrulama Kodu', type: 'text' },
       },
       async authorize(credentials, req) {
         if (!credentials?.email || !credentials?.password) {
@@ -48,9 +50,25 @@ export const authOptions: NextAuthOptions = {
         });
 
         if (!user) throw new Error('Giris bilgileri gecersiz');
+        if (!user.emailVerifiedAt) throw new Error('EMAIL_NOT_VERIFIED');
 
         const isValid = await bcrypt.compare(credentials.password, user.password);
         if (!isValid) throw new Error('Giris bilgileri gecersiz');
+
+        if (user.mfaEnabled) {
+          const otp = String(credentials.otp || '').trim();
+
+          if (!otp) {
+            const code = await issueAdminMfaCode(user.id, user.email);
+            await sendAdminMfaEmail(user.email, code);
+            throw new Error('MFA_REQUIRED');
+          }
+
+          const isValidOtp = await verifyAdminMfaCode(user.id, otp);
+          if (!isValidOtp) {
+            throw new Error('MFA_INVALID');
+          }
+        }
 
         return {
           id: user.id,
@@ -92,6 +110,7 @@ export const authOptions: NextAuthOptions = {
         });
 
         if (!user) throw new Error('Giris bilgileri gecersiz');
+        if (!user.emailVerifiedAt) throw new Error('EMAIL_NOT_VERIFIED');
 
         const isValid = await bcrypt.compare(credentials.password, user.password);
         if (!isValid) throw new Error('Giris bilgileri gecersiz');

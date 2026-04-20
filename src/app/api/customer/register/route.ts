@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
+import { sendEmailVerification } from '@/lib/accountSecurity';
 import { applyRateLimit, getClientIp, tooManyRequestsResponse } from '@/lib/security';
 
 const registerSchema = z.object({
@@ -48,5 +49,17 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  return NextResponse.json(customer, { status: 201 });
+  try {
+    await sendEmailVerification(email, 'CUSTOMER');
+  } catch (error) {
+    console.error('Customer verification email error:', error);
+  }
+
+  return NextResponse.json(
+    {
+      ...customer,
+      verificationPending: true,
+    },
+    { status: 201 }
+  );
 }

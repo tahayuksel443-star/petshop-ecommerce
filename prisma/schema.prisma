@@ -8,28 +8,69 @@ datasource db {
 }
 
 model AdminUser {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  password  String
-  name      String
-  role      AdminRole @default(ADMIN)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id              String         @id @default(cuid())
+  email           String         @unique
+  password        String
+  name            String
+  role            AdminRole      @default(ADMIN)
+  emailVerifiedAt DateTime?
+  mfaEnabled      Boolean        @default(false)
+  mfaCodes        AdminMfaCode[]
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
 
   @@map("admin_users")
 }
 
 model CustomerUser {
-  id          String   @id @default(cuid())
-  email       String   @unique
-  password    String
-  name        String
-  phone       String?
-  orders      Order[]
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id              String    @id @default(cuid())
+  email           String    @unique
+  password        String
+  name            String
+  phone           String?
+  emailVerifiedAt DateTime?
+  orders          Order[]
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   @@map("customer_users")
+}
+
+model EmailVerificationToken {
+  id        String          @id @default(cuid())
+  email     String
+  authType  AuthAccountType
+  tokenHash String          @unique
+  expiresAt DateTime
+  createdAt DateTime        @default(now())
+
+  @@index([email, authType])
+  @@map("email_verification_tokens")
+}
+
+model PasswordResetToken {
+  id        String          @id @default(cuid())
+  email     String
+  authType  AuthAccountType
+  tokenHash String          @unique
+  expiresAt DateTime
+  createdAt DateTime        @default(now())
+
+  @@index([email, authType])
+  @@map("password_reset_tokens")
+}
+
+model AdminMfaCode {
+  id          String    @id @default(cuid())
+  adminUser    AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+  adminUserId  String
+  codeHash     String
+  expiresAt    DateTime
+  consumedAt   DateTime?
+  createdAt    DateTime  @default(now())
+
+  @@index([adminUserId, createdAt])
+  @@map("admin_mfa_codes")
 }
 
 model Category {
@@ -201,4 +242,9 @@ enum PaymentStatus {
 enum DiscountType {
   PERCENTAGE
   FIXED
+}
+
+enum AuthAccountType {
+  ADMIN
+  CUSTOMER
 }

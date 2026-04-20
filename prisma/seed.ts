@@ -16,12 +16,16 @@ async function main() {
       password: hashedPassword,
       name: 'Kosem Admin',
       role: 'SUPER_ADMIN',
+      emailVerifiedAt: new Date(),
+      mfaEnabled: true,
     },
     create: {
       email: adminEmail,
       password: hashedPassword,
       name: 'Kosem Admin',
       role: 'SUPER_ADMIN',
+      emailVerifiedAt: new Date(),
+      mfaEnabled: true,
     },
   });
   console.log('Admin kullanicisi hazir:', adminEmail);

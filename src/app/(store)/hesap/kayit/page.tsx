@@ -2,7 +2,6 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { signIn } from 'next-auth/react';
 import { useState } from 'react';
 import toast from 'react-hot-toast';
 
@@ -46,20 +45,8 @@ export default function CustomerRegisterPage() {
       return;
     }
 
-    const loginResult = await signIn('customer-credentials', {
-      email: form.email,
-      password: form.password,
-      redirect: false,
-    });
-
-    if (loginResult?.ok) {
-      toast.success('Uyelik olusturuldu');
-      router.push('/hesap/siparisler');
-      router.refresh();
-    } else {
-      toast.success('Uyelik olusturuldu, simdi giris yapabilirsiniz');
-      router.push('/hesap/giris');
-    }
+    toast.success('Uyelik olusturuldu. E-posta dogrulamasini tamamlayin');
+    router.push(`/hesap/giris?verifyEmail=1&email=${encodeURIComponent(form.email)}`);
 
     setLoading(false);
   };

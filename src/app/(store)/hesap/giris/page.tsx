@@ -17,8 +17,10 @@ export default function CustomerLoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const callbackUrl = sanitizeCallbackUrl(searchParams?.get('callbackUrl') || null);
-  const [form, setForm] = useState({ email: '', password: '' });
+  const prefilledEmail = searchParams?.get('email') || '';
+  const [form, setForm] = useState({ email: prefilledEmail, password: '' });
   const [loading, setLoading] = useState(false);
+  const [resendingVerification, setResendingVerification] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -35,10 +37,39 @@ export default function CustomerLoginPage() {
       router.push(callbackUrl);
       router.refresh();
     } else {
-      toast.error('E-posta veya sifre hatali');
+      if (result?.error === 'EMAIL_NOT_VERIFIED') {
+        toast.error('Once e-posta adresinizi dogrulayin');
+      } else {
+        toast.error('E-posta veya sifre hatali');
+      }
     }
 
     setLoading(false);
+  };
+
+  const handleResendVerification = async () => {
+    const email = (form.email || prefilledEmail).trim();
+    if (!email) {
+      toast.error('Once e-posta adresinizi girin');
+      return;
+    }
+
+    setResendingVerification(true);
+
+    const res = await fetch('/api/auth/email-verification/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, authType: 'CUSTOMER' }),
+    });
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      toast.error(data.error || 'Dogrulama maili gonderilemedi');
+    } else {
+      toast.success('Dogrulama maili tekrar gonderildi');
+    }
+
+    setResendingVerification(false);
   };
 
   return (
@@ -46,6 +77,30 @@ export default function CustomerLoginPage() {
       <div className="card p-8">
         <h1 className="text-2xl font-bold text-gray-900">Uye Girisi</h1>
         <p className="mt-2 text-sm text-gray-500">Siparislerinizi takip etmek ve daha hizli odeme icin giris yapin.</p>
+
+        {searchParams?.get('verified') === '1' ? (
+          <div className="mt-4 rounded-2xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+            E-posta adresiniz dogrulandi. Artik giris yapabilirsiniz.
+          </div>
+        ) : null}
+
+        {searchParams?.get('verified') === '0' ? (
+          <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            Dogrulama baglantisi gecersiz veya suresi dolmus.
+          </div>
+        ) : null}
+
+        {searchParams?.get('verifyEmail') === '1' ? (
+          <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            Hesabiniz olusturuldu. Giris yapmadan once e-posta kutunuzdaki dogrulama baglantisina tiklayin.
+          </div>
+        ) : null}
+
+        {searchParams?.get('reset') === '1' ? (
+          <div className="mt-4 rounded-2xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+            Sifreniz yenilendi. Yeni sifrenizle giris yapabilirsiniz.
+          </div>
+        ) : null}
 
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
           <div>
@@ -55,6 +110,7 @@ export default function CustomerLoginPage() {
               className="input-field"
               value={form.email}
               onChange={(e) => setForm({ ...form, email: e.target.value })}
+              placeholder={prefilledEmail || 'ornek@mail.com'}
               required
             />
           </div>
@@ -73,6 +129,20 @@ export default function CustomerLoginPage() {
             {loading ? 'Giris yapiliyor...' : 'Giris Yap'}
           </button>
         </form>
+
+        <div className="mt-4 flex items-center justify-between gap-3 text-sm">
+          <button
+            type="button"
+            onClick={handleResendVerification}
+            disabled={resendingVerification}
+            className="font-semibold text-primary-600 hover:underline disabled:opacity-60"
+          >
+            {resendingVerification ? 'Gonderiliyor...' : 'Dogrulama mailini tekrar gonder'}
+          </button>
+          <Link href="/hesap/sifre-sifirla" className="font-semibold text-gray-600 hover:underline">
+            Sifremi unuttum
+          </Link>
+        </div>
 
         <p className="mt-5 text-sm text-gray-500">
           Hesabiniz yok mu?{' '}

@@ -4,16 +4,34 @@ import bcrypt from 'bcryptjs';
 import { applyRateLimit } from './security';
 import { issueAdminMfaCode, sendAdminMfaEmail, verifyAdminMfaCode } from './accountSecurity';
 
+function readHeaderValue(headers: unknown, key: string) {
+  if (!headers || typeof headers !== 'object') return null;
+
+  if (typeof (headers as { get?: unknown }).get === 'function') {
+    const value = (headers as { get: (name: string) => string | null }).get(key);
+    return typeof value === 'string' ? value : null;
+  }
+
+  const normalizedKey = key.toLowerCase();
+  const plainHeaders = headers as Record<string, unknown>;
+
+  const directValue = plainHeaders[normalizedKey] ?? plainHeaders[key];
+  if (typeof directValue === 'string') return directValue;
+  if (Array.isArray(directValue) && typeof directValue[0] === 'string') return directValue[0];
+
+  return null;
+}
+
 function getRequestIp(req: unknown) {
   if (!req || typeof req !== 'object' || !('headers' in req)) return 'unknown';
 
-  const headers = (req as { headers?: Headers }).headers;
+  const headers = (req as { headers?: unknown }).headers;
   if (!headers) return 'unknown';
 
-  const forwarded = headers.get('x-forwarded-for');
+  const forwarded = readHeaderValue(headers, 'x-forwarded-for');
   if (forwarded) return forwarded.split(',')[0].trim();
 
-  return headers.get('x-real-ip') || 'unknown';
+  return readHeaderValue(headers, 'x-real-ip') || 'unknown';
 }
 
 export const authOptions: NextAuthOptions = {

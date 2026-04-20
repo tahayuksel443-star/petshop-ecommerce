@@ -38,6 +38,7 @@ export interface Category {
 export interface Order {
   id: string;
   orderNumber: string;
+  trackingToken?: string | null;
   status: OrderStatus;
   paymentStatus: PaymentStatus;
   paymentId?: string | null;
@@ -96,6 +97,25 @@ export interface CartItem {
   image: string;
   quantity: number;
   stock: number;
+}
+
+export interface CartQuoteItem {
+  id: string;
+  name: string;
+  slug: string;
+  image: string;
+  quantity: number;
+  stock: number;
+  price: number;
+  discountPrice?: number | null;
+  lineTotal: number;
+}
+
+export interface CartQuote {
+  items: CartQuoteItem[];
+  subtotal: number;
+  shippingCost: number;
+  freeShippingMin: number | null;
 }
 
 export interface Coupon {

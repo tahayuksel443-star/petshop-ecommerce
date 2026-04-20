@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { createThreeDSPayment } from '@/lib/iyzico';
-import { generateOrderNumber } from '@/lib/utils';
+import { generateOrderNumber, generateTrackingToken } from '@/lib/utils';
 import { v4 as uuidv4 } from 'uuid';
 import { applyRateLimit, getClientIp, hasTrustedOrigin, tooManyRequestsResponse } from '@/lib/security';
 import { authOptions } from '@/lib/auth';
@@ -153,6 +153,7 @@ export async function POST(req: NextRequest) {
 
   const finalAmount = Number((subtotal + shippingCost - discountAmount).toFixed(2));
   const orderNumber = generateOrderNumber();
+  const trackingToken = generateTrackingToken();
   const conversationId = uuidv4();
 
   const basketItems = normalizedItems.map(({ product, quantity, unitPrice }) => ({
@@ -229,6 +230,7 @@ export async function POST(req: NextRequest) {
     await prisma.order.create({
       data: {
         orderNumber,
+        trackingToken,
         status: 'PENDING',
         paymentStatus: 'PENDING',
         paymentId: conversationId,
@@ -257,6 +259,7 @@ export async function POST(req: NextRequest) {
       status: 'success',
       threeDSHtmlContent: result.threeDSHtmlContent,
       orderNumber,
+      trackingToken,
     });
   } catch (error) {
     console.error('iyzico error:', error);

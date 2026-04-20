@@ -1,3 +1,5 @@
+import { randomBytes } from 'crypto';
+
 export function formatPrice(price: number): string {
   return new Intl.NumberFormat('tr-TR', {
     style: 'currency',
@@ -18,8 +20,12 @@ export function formatDate(date: string | Date): string {
 
 export function generateOrderNumber(): string {
   const timestamp = Date.now().toString(36).toUpperCase();
-  const random = Math.random().toString(36).substring(2, 6).toUpperCase();
+  const random = randomBytes(4).toString('hex').toUpperCase();
   return `PS-${timestamp}-${random}`;
+}
+
+export function generateTrackingToken(): string {
+  return `TRK-${randomBytes(12).toString('hex').toUpperCase()}`;
 }
 
 export function slugify(text: string): string {

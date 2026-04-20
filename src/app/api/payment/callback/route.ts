@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (existingOrder.paymentStatus === 'SUCCESS') {
-    return redirectTo(`/odeme/basarili?siparis=${existingOrder.orderNumber}`);
+    return redirectTo(`/odeme/basarili?siparis=${existingOrder.orderNumber}${existingOrder.trackingToken ? `&takip=${existingOrder.trackingToken}` : ''}`);
   }
 
   if (status !== 'success' || !paymentId || !conversationData) {
@@ -133,7 +133,7 @@ export async function POST(req: NextRequest) {
       });
     });
 
-    return redirectTo(`/odeme/basarili?siparis=${existingOrder.orderNumber}`);
+    return redirectTo(`/odeme/basarili?siparis=${existingOrder.orderNumber}${existingOrder.trackingToken ? `&takip=${existingOrder.trackingToken}` : ''}`);
   } catch (error) {
     console.error('3DS callback error:', error);
 

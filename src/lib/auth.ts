@@ -3,6 +3,18 @@ import CredentialsProvider from 'next-auth/providers/credentials';
 import bcrypt from 'bcryptjs';
 import { applyRateLimit } from './security';
 
+function getRequestIp(req: unknown) {
+  if (!req || typeof req !== 'object' || !('headers' in req)) return 'unknown';
+
+  const headers = (req as { headers?: Headers }).headers;
+  if (!headers) return 'unknown';
+
+  const forwarded = headers.get('x-forwarded-for');
+  if (forwarded) return forwarded.split(',')[0].trim();
+
+  return headers.get('x-real-ip') || 'unknown';
+}
+
 export const authOptions: NextAuthOptions = {
   providers: [
     CredentialsProvider({
@@ -12,24 +24,27 @@ export const authOptions: NextAuthOptions = {
         email: { label: 'Email', type: 'email' },
         password: { label: 'Sifre', type: 'password' },
       },
-      async authorize(credentials) {
+      async authorize(credentials, req) {
         if (!credentials?.email || !credentials?.password) {
           throw new Error('Giris bilgileri gecersiz');
         }
 
+        const email = String(credentials.email).trim().toLowerCase();
+        const ip = getRequestIp(req);
         const limiter = applyRateLimit(
           `admin-login:${String(credentials.email).toLowerCase()}`,
           5,
           15 * 60 * 1000
         );
+        const ipLimiter = applyRateLimit(`admin-login-ip:${ip}`, 20, 15 * 60 * 1000);
 
-        if (!limiter.allowed) {
+        if (!limiter.allowed || !ipLimiter.allowed) {
           throw new Error('Cok fazla hatali giris denemesi. Lutfen daha sonra tekrar deneyin');
         }
 
         const { prisma } = await import('./prisma');
         const user = await prisma.adminUser.findUnique({
-          where: { email: String(credentials.email).trim().toLowerCase() },
+          where: { email },
         });
 
         if (!user) throw new Error('Giris bilgileri gecersiz');
@@ -53,24 +68,27 @@ export const authOptions: NextAuthOptions = {
         email: { label: 'Email', type: 'email' },
         password: { label: 'Sifre', type: 'password' },
       },
-      async authorize(credentials) {
+      async authorize(credentials, req) {
         if (!credentials?.email || !credentials?.password) {
           throw new Error('Giris bilgileri gecersiz');
         }
 
+        const email = String(credentials.email).trim().toLowerCase();
+        const ip = getRequestIp(req);
         const limiter = applyRateLimit(
           `customer-login:${String(credentials.email).toLowerCase()}`,
           8,
           15 * 60 * 1000
         );
+        const ipLimiter = applyRateLimit(`customer-login-ip:${ip}`, 30, 15 * 60 * 1000);
 
-        if (!limiter.allowed) {
+        if (!limiter.allowed || !ipLimiter.allowed) {
           throw new Error('Cok fazla hatali giris denemesi. Lutfen daha sonra tekrar deneyin');
         }
 
         const { prisma } = await import('./prisma');
         const user = await prisma.customerUser.findUnique({
-          where: { email: String(credentials.email).trim().toLowerCase() },
+          where: { email },
         });
 
         if (!user) throw new Error('Giris bilgileri gecersiz');

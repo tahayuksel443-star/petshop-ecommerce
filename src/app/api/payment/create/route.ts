@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { createThreeDSPayment } from '@/lib/iyzico';
 import { generateOrderNumber } from '@/lib/utils';
 import { v4 as uuidv4 } from 'uuid';
 import { applyRateLimit, getClientIp, tooManyRequestsResponse } from '@/lib/security';
+import { authOptions } from '@/lib/auth';
 
 export const runtime = 'nodejs';
 
@@ -43,6 +45,11 @@ function normalizePhone(phone: string) {
 }
 
 export async function POST(req: NextRequest) {
+  const session = await getServerSession(authOptions);
+  const customerSession =
+    session?.user && (session.user as { authType?: string }).authType === 'customer'
+      ? session.user
+      : null;
   const ip = getClientIp(req);
   const limiter = applyRateLimit(`payment-create:${ip}`, 10, 10 * 60 * 1000);
   if (!limiter.allowed) return tooManyRequestsResponse('Cok fazla odeme denemesi yapildi. Lutfen biraz sonra tekrar deneyin.');
@@ -224,6 +231,7 @@ export async function POST(req: NextRequest) {
         customerName: `${shippingAddress.name} ${shippingAddress.surname}`,
         customerEmail: shippingAddress.email,
         customerPhone: shippingAddress.phone,
+        customerId: customerSession?.id,
         notes: shippingAddress.notes || null,
         items: {
           create: normalizedItems.map(({ product, quantity, unitPrice }) => ({

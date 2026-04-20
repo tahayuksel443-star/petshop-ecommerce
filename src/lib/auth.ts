@@ -6,7 +6,8 @@ import { applyRateLimit } from './security';
 export const authOptions: NextAuthOptions = {
   providers: [
     CredentialsProvider({
-      name: 'credentials',
+      id: 'admin-credentials',
+      name: 'admin-credentials',
       credentials: {
         email: { label: 'Email', type: 'email' },
         password: { label: 'Sifre', type: 'password' },
@@ -41,6 +42,48 @@ export const authOptions: NextAuthOptions = {
           email: user.email,
           name: user.name,
           role: user.role,
+          authType: 'admin',
+        };
+      },
+    }),
+    CredentialsProvider({
+      id: 'customer-credentials',
+      name: 'customer-credentials',
+      credentials: {
+        email: { label: 'Email', type: 'email' },
+        password: { label: 'Sifre', type: 'password' },
+      },
+      async authorize(credentials) {
+        if (!credentials?.email || !credentials?.password) {
+          throw new Error('Giris bilgileri gecersiz');
+        }
+
+        const limiter = applyRateLimit(
+          `customer-login:${String(credentials.email).toLowerCase()}`,
+          8,
+          15 * 60 * 1000
+        );
+
+        if (!limiter.allowed) {
+          throw new Error('Cok fazla hatali giris denemesi. Lutfen daha sonra tekrar deneyin');
+        }
+
+        const { prisma } = await import('./prisma');
+        const user = await prisma.customerUser.findUnique({
+          where: { email: String(credentials.email).trim().toLowerCase() },
+        });
+
+        if (!user) throw new Error('Giris bilgileri gecersiz');
+
+        const isValid = await bcrypt.compare(credentials.password, user.password);
+        if (!isValid) throw new Error('Giris bilgileri gecersiz');
+
+        return {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          role: 'CUSTOMER',
+          authType: 'customer',
         };
       },
     }),
@@ -50,6 +93,7 @@ export const authOptions: NextAuthOptions = {
       if (user) {
         token.id = user.id;
         token.role = (user as any).role;
+        token.authType = (user as any).authType;
       }
       return token;
     },
@@ -57,6 +101,7 @@ export const authOptions: NextAuthOptions = {
       if (session.user) {
         (session.user as any).id = token.id;
         (session.user as any).role = token.role;
+        (session.user as any).authType = token.authType;
       }
       return session;
     },

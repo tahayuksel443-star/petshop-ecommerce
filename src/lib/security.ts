@@ -12,7 +12,26 @@ export async function requireAdminSession() {
   const { authOptions } = await import('@/lib/auth');
   const session = await getServerSession(authOptions);
 
-  if (!session?.user || !['ADMIN', 'SUPER_ADMIN'].includes((session.user as { role?: string }).role || '')) {
+  if (
+    !session?.user ||
+    (session.user as { authType?: string }).authType !== 'admin' ||
+    !['ADMIN', 'SUPER_ADMIN'].includes((session.user as { role?: string }).role || '')
+  ) {
+    return null;
+  }
+
+  return session;
+}
+
+export async function requireCustomerSession() {
+  const { authOptions } = await import('@/lib/auth');
+  const session = await getServerSession(authOptions);
+
+  if (
+    !session?.user ||
+    (session.user as { authType?: string }).authType !== 'customer' ||
+    (session.user as { role?: string }).role !== 'CUSTOMER'
+  ) {
     return null;
   }
 

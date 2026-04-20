@@ -50,8 +50,18 @@ export interface Order {
   customerName: string;
   customerEmail: string;
   customerPhone: string;
+  customerId?: string | null;
   notes?: string | null;
   items: OrderItem[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CustomerUser {
+  id: string;
+  email: string;
+  name: string;
+  phone?: string | null;
   createdAt: string;
   updatedAt: string;
 }

@@ -6,10 +6,17 @@ import { signIn } from 'next-auth/react';
 import { useState } from 'react';
 import toast from 'react-hot-toast';
 
+function sanitizeCallbackUrl(callbackUrl: string | null) {
+  if (!callbackUrl) return '/hesap/siparisler';
+  if (!callbackUrl.startsWith('/')) return '/hesap/siparisler';
+  if (callbackUrl.startsWith('//')) return '/hesap/siparisler';
+  return callbackUrl;
+}
+
 export default function CustomerLoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const callbackUrl = searchParams?.get('callbackUrl') || '/hesap/siparisler';
+  const callbackUrl = sanitizeCallbackUrl(searchParams?.get('callbackUrl') || null);
   const [form, setForm] = useState({ email: '', password: '' });
   const [loading, setLoading] = useState(false);
 

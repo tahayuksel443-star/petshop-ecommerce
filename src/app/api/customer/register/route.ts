@@ -8,7 +8,11 @@ const registerSchema = z.object({
   name: z.string().trim().min(2).max(100),
   email: z.string().trim().email().max(150),
   phone: z.string().trim().min(10).max(20).optional().nullable(),
-  password: z.string().min(6).max(72),
+  password: z
+    .string()
+    .min(8)
+    .max(72)
+    .regex(/^(?=.*[A-Za-z])(?=.*\d).+$/, 'Sifre en az bir harf ve bir rakam icermelidir'),
 });
 
 export async function POST(req: NextRequest) {
@@ -25,7 +29,7 @@ export async function POST(req: NextRequest) {
   const existing = await prisma.customerUser.findUnique({ where: { email } });
 
   if (existing) {
-    return NextResponse.json({ error: 'Bu e-posta ile zaten uyelik var' }, { status: 409 });
+    return NextResponse.json({ error: 'Kayit istegi islenemedi' }, { status: 400 });
   }
 
   const password = await bcrypt.hash(data.password, 10);

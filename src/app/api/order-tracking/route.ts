@@ -22,13 +22,25 @@ export async function POST(req: NextRequest) {
       orderNumber: parsed.data.orderNumber,
       customerEmail: parsed.data.email.toLowerCase(),
     },
-    include: {
-      items: true,
+    select: {
+      id: true,
+      orderNumber: true,
+      status: true,
+      totalAmount: true,
+      createdAt: true,
+      items: {
+        select: {
+          id: true,
+          productName: true,
+          quantity: true,
+          price: true,
+        },
+      },
     },
   });
 
   if (!order) {
-    return NextResponse.json({ error: 'Siparis bulunamadi' }, { status: 404 });
+    return NextResponse.json({ error: 'Siparis bilgileri eslesmedi' }, { status: 404 });
   }
 
   return NextResponse.json(order);

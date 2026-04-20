@@ -31,8 +31,9 @@ export async function GET(req: NextRequest) {
   const page = Math.max(1, Number(searchParams.get('page') || 1));
   const limit = Math.min(100, Math.max(1, Number(searchParams.get('limit') || 50)));
 
-  const where: Record<string, unknown> = {};
-  if (active !== null) where.isActive = active === 'true';
+  const where: Record<string, unknown> = {
+    isActive: active !== null ? active === 'true' : true,
+  };
   if (categorySlug) where.category = { slug: categorySlug };
   if (search) {
     where.OR = [
@@ -46,7 +47,27 @@ export async function GET(req: NextRequest) {
   const [products, total] = await Promise.all([
     prisma.product.findMany({
       where,
-      include: { category: true },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        description: true,
+        shortDesc: true,
+        price: true,
+        discountPrice: true,
+        stock: true,
+        images: true,
+        isActive: true,
+        isFeatured: true,
+        isBestseller: true,
+        brand: true,
+        weight: true,
+        sku: true,
+        categoryId: true,
+        createdAt: true,
+        updatedAt: true,
+        category: true,
+      },
       orderBy: { createdAt: 'desc' },
       skip: (page - 1) * limit,
       take: limit,

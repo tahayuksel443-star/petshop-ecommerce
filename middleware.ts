@@ -2,6 +2,16 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { getToken } from 'next-auth/jwt';
 
+function isAdminToken(token: Awaited<ReturnType<typeof getToken>>) {
+  const sessionToken = token as { authType?: string; role?: string } | null;
+
+  return (
+    !!sessionToken &&
+    sessionToken.authType === 'admin' &&
+    ['ADMIN', 'SUPER_ADMIN'].includes(String(sessionToken.role || ''))
+  );
+}
+
 function applySecurityHeaders(response: NextResponse, isHttps: boolean) {
   response.headers.set('X-Frame-Options', 'SAMEORIGIN');
   response.headers.set('X-Content-Type-Options', 'nosniff');
@@ -41,7 +51,7 @@ export async function middleware(req: NextRequest) {
       secret: process.env.NEXTAUTH_SECRET,
     });
 
-    if (!token) {
+    if (!isAdminToken(token)) {
       const loginUrl = new URL('/admin/giris', req.url);
       return applySecurityHeaders(NextResponse.redirect(loginUrl), isHttps);
     }

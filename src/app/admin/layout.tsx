@@ -1,14 +1,14 @@
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { redirect } from 'next/navigation';
+import { requireAdminSession } from '@/lib/security';
 import AdminSidebar from '@/components/admin/AdminSidebar';
 import AdminHeader from '@/components/admin/AdminHeader';
 import AdminMobileNav from '@/components/admin/AdminMobileNav';
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  const session = await getServerSession(authOptions);
+  const session = await requireAdminSession();
 
   if (!session) {
-    return <>{children}</>;
+    redirect('/admin/giris');
   }
 
   return (

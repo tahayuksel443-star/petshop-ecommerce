@@ -20,6 +20,17 @@ const faqItemSchema = z.object({
   a: z.string().trim().min(1).max(2000),
 });
 
+const nullableNumberField = z.preprocess((value) => {
+  if (value === '' || value === null || value === undefined) return null;
+  if (typeof value === 'string') {
+    const normalized = Number(value);
+    return Number.isNaN(normalized) ? value : normalized;
+  }
+  return value;
+}, z.number().min(0).max(1000000).nullable());
+
+const optionalNullableNumberField = nullableNumberField.optional();
+
 const settingsSchema = z.object({
   siteName: z.string().trim().min(2).max(120).optional(),
   siteDescription: z.string().trim().max(500).nullable().optional(),
@@ -34,8 +45,15 @@ const settingsSchema = z.object({
   twitter: z.string().trim().url().max(500).nullable().optional().or(z.literal('')),
   youtube: z.string().trim().url().max(500).nullable().optional().or(z.literal('')),
   whatsapp: z.string().trim().max(100).nullable().optional(),
-  freeShippingMin: z.number().min(0).max(1000000).nullable().optional(),
-  shippingCost: z.number().min(0).max(1000000).optional(),
+  freeShippingMin: optionalNullableNumberField,
+  shippingCost: z.preprocess((value) => {
+    if (value === '' || value === null || value === undefined) return undefined;
+    if (typeof value === 'string') {
+      const normalized = Number(value);
+      return Number.isNaN(normalized) ? value : normalized;
+    }
+    return value;
+  }, z.number().min(0).max(1000000).optional()),
   heroBadge: z.string().trim().max(120).nullable().optional(),
   heroTitle: z.string().trim().max(250).nullable().optional(),
   heroDescription: z.string().trim().max(1000).nullable().optional(),
@@ -96,7 +114,10 @@ async function saveSettings(req: NextRequest) {
   const parsed = settingsSchema.safeParse(normalizeEmptyStrings(body));
 
   if (!parsed.success) {
-    return NextResponse.json({ error: 'Gecersiz ayar verisi' }, { status: 400 });
+    return NextResponse.json({
+      error: 'Gecersiz ayar verisi',
+      details: parsed.error.flatten(),
+    }, { status: 400 });
   }
 
   let settings = await prisma.siteSettings.findFirst();

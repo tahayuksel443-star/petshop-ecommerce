@@ -54,7 +54,8 @@ export default function AdminSettingsPage() {
     if (res.ok) {
       toast.success('Ayarlar kaydedildi');
     } else {
-      toast.error('Kaydetme basarisiz');
+      const data = await res.json().catch(() => ({ error: 'Kaydetme basarisiz' }));
+      toast.error(data.error || 'Kaydetme basarisiz');
     }
 
     setSaving(false);

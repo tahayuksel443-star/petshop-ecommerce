@@ -38,9 +38,20 @@ export async function POST(req: NextRequest) {
     return tooManyRequestsResponse('Cok fazla mesaj denemesi yapildi. Lutfen biraz sonra tekrar deneyin.');
   }
 
-  const parsed = contactSchema.safeParse(await req.json());
+  const rawBody = await req.json();
+  const normalizedBody = {
+    name: typeof rawBody?.name === 'string' ? rawBody.name.trim() : rawBody?.name,
+    email: typeof rawBody?.email === 'string' ? rawBody.email.trim() : rawBody?.email,
+    subject: typeof rawBody?.subject === 'string' ? rawBody.subject.trim() : rawBody?.subject,
+    message: typeof rawBody?.message === 'string' ? rawBody.message.trim() : rawBody?.message,
+  };
+
+  const parsed = contactSchema.safeParse(normalizedBody);
   if (!parsed.success) {
-    return NextResponse.json({ error: 'Gecersiz mesaj bilgisi' }, { status: 400 });
+    return NextResponse.json({
+      error: 'Gecersiz mesaj bilgisi',
+      details: parsed.error.flatten(),
+    }, { status: 400 });
   }
 
   const transporter = getTransporter();

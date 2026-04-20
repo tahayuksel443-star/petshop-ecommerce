@@ -10,19 +10,51 @@ export default function ContactForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const normalizedForm = {
+      name: form.name.trim(),
+      email: form.email.trim(),
+      subject: form.subject.trim(),
+      message: form.message.trim(),
+    };
+
+    if (normalizedForm.name.length < 2) {
+      toast.error('Ad soyad en az 2 karakter olmali');
+      return;
+    }
+
+    if (!normalizedForm.email) {
+      toast.error('E-posta alani zorunlu');
+      return;
+    }
+
+    if (!normalizedForm.subject) {
+      toast.error('Lutfen bir konu secin');
+      return;
+    }
+
+    if (normalizedForm.message.length < 10) {
+      toast.error('Mesaj en az 10 karakter olmali');
+      return;
+    }
+
     setLoading(true);
 
     try {
       const res = await fetch('/api/contact', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify(normalizedForm),
       });
 
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        toast.error(data.error || 'Mesaj gonderilemedi');
+        const detailedMessage =
+          data?.details?.fieldErrors
+            ? Object.values(data.details.fieldErrors).flat().filter(Boolean)[0]
+            : null;
+
+        toast.error(detailedMessage || data.error || 'Mesaj gonderilemedi');
         return;
       }
 
